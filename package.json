@@ -1,7 +1,7 @@
 {
   "name": "streamout-webcomponent",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.0.1",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -11,5 +11,15 @@
   "devDependencies": {
     "typescript": "~5.7.2",
     "vite": "^6.2.0"
+  },
+  "prettier": {
+    "trailingComma": "es5",
+    "useTabs": false,
+    "tabWidth": 4,
+    "semi": false,
+    "singleQuote": true
+  },
+  "dependencies": {
+    "mp4-muxer": "^5.2.0"
   }
 }
