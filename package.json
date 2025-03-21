@@ -1,25 +1,31 @@
 {
-  "name": "streamout-webcomponent",
   "private": true,
+  "name": "ventuz-stream-player",
   "version": "0.0.1",
+  "author": "Tammo Hinrichs <tammo.hinrichs@ventuz.com> (https://ventuz.com/)",
+  "description": "A web component for showing and interacting with Ventuz Stream Out outputs",
+  "homepage": "https://github.com/VentuzTechnology/streamout-webcomponent",
+
   "type": "module",
-  "scripts": {
-    "dev": "vite",
-    "build": "tsc && vite build",
-    "preview": "vite preview"
+  "dependencies": {
+    "mp4-muxer": "^5.2.0"
   },
   "devDependencies": {
     "typescript": "~5.7.2",
     "vite": "^6.2.0"
   },
+
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview"
+  },
+
   "prettier": {
     "trailingComma": "es5",
     "useTabs": false,
     "tabWidth": 4,
     "semi": false,
     "singleQuote": true
-  },
-  "dependencies": {
-    "mp4-muxer": "^5.2.0"
   }
 }
