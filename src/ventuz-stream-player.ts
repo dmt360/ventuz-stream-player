@@ -1,6 +1,31 @@
 import { H264Demuxer } from './muxer/h264-demuxer'
 import { SlicesReader } from './muxer/h264-nal-slicesreader'
 import { MP4Remuxer } from './muxer/mp4-remuxer'
+
+let writableStream: FileSystemWritableFileStream | null = null
+
+async function openFile() {
+    try {
+        // create a new handle
+        const newHandle = await window.showSaveFilePicker()
+
+        // create a FileSystemWritableFileStream to write to
+        writableStream = await newHandle.createWritable()
+    } catch (err: any) {
+        console.error(err.name, err.message)
+    }
+}
+
+async function writeFile(data: Uint8Array) {
+    // write our file
+    await writableStream?.write(data)
+}
+
+async function closeFile() {
+    await writableStream?.close()
+    writableStream = null
+}
+
 class VentuzStreamPlayer extends HTMLElement {
     static observedAttributes = ['url']
 
@@ -19,7 +44,7 @@ class VentuzStreamPlayer extends HTMLElement {
 
     private codec: string | undefined
 
-    private sent = 0;
+    private sent = 0
 
     private createSrcBuffer() {
         if (this.mediaSource) {
@@ -38,7 +63,7 @@ class VentuzStreamPlayer extends HTMLElement {
                 this.handleQueue()
             }
 
-            this.sent = 0;
+            this.sent = 0
             this.handleQueue()
         }
     }
@@ -48,8 +73,15 @@ class VentuzStreamPlayer extends HTMLElement {
         this.closeStream()
 
         this.streamHeader = hdr
+        while (hdr.videoFrameRateDen < 1000)
+        {
+            hdr.videoFrameRateNum *= 10;
+            hdr.videoFrameRateDen *= 10;
+        }
 
         this.mp4Remuxer = new MP4Remuxer({
+            timeBase: hdr.videoFrameRateDen,
+            timeScale: hdr.videoFrameRateNum,
             onInitSegment: (is) => {
                 console.log('got is', is)
 
@@ -67,11 +99,9 @@ class VentuzStreamPlayer extends HTMLElement {
                     this.video.height = is.metadata.height
                     this.video.tabIndex = 0
 
-                    this.video.onerror = (e) =>
-                    {
-                        console.error('video error', e)                        
+                    this.video.onerror = (e) => {
+                        console.error('video error', e)
                     }
-
                 }
 
                 this.onMuxerData(is.data)
@@ -79,11 +109,13 @@ class VentuzStreamPlayer extends HTMLElement {
 
             onData: (data) => {
                 //console.log("got data", data)
-                this.onMuxerData(data)              
+                this.onMuxerData(data)
             },
         })
 
         this.h264Demuxer = new H264Demuxer({
+            timeBase: hdr.videoFrameRateDen,
+
             forceKeyFrameOnDiscontinuity: false,
 
             onBufferReset: (codec) => {
@@ -106,8 +138,7 @@ class VentuzStreamPlayer extends HTMLElement {
 
         this.queue.length = 0
 
-        if (this.mediaSource && this.video)
-        {
+        if (this.mediaSource && this.video) {
             URL.revokeObjectURL(this.video.src)
         }
         delete this.mediaSource
@@ -124,38 +155,32 @@ class VentuzStreamPlayer extends HTMLElement {
     private onMuxerData(data: Uint8Array) {
         if (!this.mediaSource) return
 
-        if (this.vidSrcBuffer && !this.vidSrcBuffer.updating) {
-            console.log('add', data.length)
-            this.vidSrcBuffer.appendBuffer(data)
-            if (++this.sent == 3) {
-                try {
-                    this.video?.play();
-                }
-                catch {
-                    
-                }
-            }        
-            //            console.log('add done', data.length)
-        } else {
-            //console.log("q mp4", data.length);
-            this.queue.push(data)
-        }
+        this.queue.push(data)
+        this.handleQueue()
     }
 
     private handleQueue() {
-        if (this.queue.length > 0 && this.vidSrcBuffer != null) {
+        if (
+            this.queue.length > 0 &&
+            this.vidSrcBuffer &&
+            !this.vidSrcBuffer.updating
+        ) {
             const data = this.queue.shift()!
-            console.log('dq', data.length)
+            //console.log('dq', data.length)
+
+            //await writeFile(data)
+
             this.vidSrcBuffer.appendBuffer(data)
-            if (++this.sent == 3) {
+            /*
+            if (++this.sent === 3) {
                 try {
                     this.video?.play();
                 }
-                catch {
+                catch (err) {
 
                 }
-            }        
-            //            console.log('dq done', data.length)
+            } 
+                */
         }
     }
 
@@ -192,7 +217,7 @@ class VentuzStreamPlayer extends HTMLElement {
         this.ws = new WebSocket(this.url)
         this.ws.binaryType = 'arraybuffer'
 
-        this.ws.onopen = async () => {
+        this.ws.onopen = () => {
             console.log('WS open')
         }
 
@@ -205,7 +230,7 @@ class VentuzStreamPlayer extends HTMLElement {
             console.error('WS error', ev)
         }
 
-        this.ws.onmessage = async (ev) => {
+        this.ws.onmessage = (ev) => {
             if (typeof ev.data === 'string') {
                 this.handlePacket(JSON.parse(ev.data) as StreamOut.StreamPacket)
                 return
@@ -251,6 +276,7 @@ class VentuzStreamPlayer extends HTMLElement {
         video.width = 640
         video.height = 360
         video.style.touchAction = 'none'
+        video.controls = true
 
         const getIntXY = (x: number, y: number) => {
             var rect = video.getBoundingClientRect()
@@ -368,7 +394,17 @@ class VentuzStreamPlayer extends HTMLElement {
             e.preventDefault()
         }
 
-        video.onclick = (e) => {
+        video.onclick = async (e) => {
+            /*
+            if (!writableStream) {
+                await openFile()
+                this.openWS()
+            } else {
+                await closeFile()
+            }
+                */
+            video.play()
+
             e.stopPropagation()
             e.preventDefault()
         }
@@ -402,11 +438,14 @@ class VentuzStreamPlayer extends HTMLElement {
         }
 
         this.appendChild(video)
+
         this.openWS()
     }
 
     disconnectedCallback() {
         console.log('disconnected')
+
+        closeFile()
         this.ws?.close()
         delete this.ws
     }

@@ -23,8 +23,10 @@ export type MP4RemuxerConfig = {
     //stretchShortVideoTrack: boolean
     //maxBufferHole: number
     //maxSeekHole: number
+    timeBase: number,
+    timeScale : number,
     onInitSegment(is: InitSegmentData): void,
-    onData(data: Uint8Array): void,
+    onData(data: Uint8Array): void,    
 }
 
 export class MP4Remuxer {
@@ -39,7 +41,6 @@ export class MP4Remuxer {
     //private PES_TIMESCALE = 90000
     //private MP4_TIMESCALE = this.PES_TIMESCALE / this.PES2MP4SCALEFACTOR
     private nextAvcDts = 90300
-    private H264_TIMEBASE = 3000
     private _initPTS: number | undefined = undefined
     private _initDTS: number | undefined = undefined
     private sn = 0
@@ -150,7 +151,7 @@ export class MP4Remuxer {
 
             outputSamples.push({
                 size: mp4SampleLength,
-                duration: this.H264_TIMEBASE,
+                duration: this.config.timeBase,
                 cts: 0,
                 flags: {
                     dependsOn: avcSample.key ? 2 : 1,
@@ -200,7 +201,7 @@ export class MP4Remuxer {
         var initseg: InitSegmentData | null = null;
 
         if (videoTrack.sps && videoTrack.pps && videoSamples.length) {
-            videoTrack.timescale = 90000 //this.MP4_TIMESCALE;
+            videoTrack.timescale = this.config.timeScale //this.MP4_TIMESCALE;
             initseg = {
                 container: 'video/mp4',
                 codec: videoTrack.codec,
@@ -214,11 +215,11 @@ export class MP4Remuxer {
             if (computePTSDTS) {
                 initPTS = Math.min(
                     initPTS,
-                    videoSamples[0].pts - this.H264_TIMEBASE
+                    videoSamples[0].pts - this.config.timeBase
                 )
                 initDTS = Math.min(
                     initDTS,
-                    videoSamples[0].dts - this.H264_TIMEBASE
+                    videoSamples[0].dts - this.config.timeBase
                 )
             }
         }

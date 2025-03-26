@@ -7,9 +7,11 @@ import { logger } from './logger'
 
 export type H264DemuxerConfig = {
   forceKeyFrameOnDiscontinuity: boolean,
+  timeBase: number,
   onBufferReset(codec: string): void,
   onVideo(sn: number, track: MP4.VideoTrack): void,
 }
+
 
 export class H264Demuxer {
     private config: H264DemuxerConfig
@@ -17,19 +19,17 @@ export class H264Demuxer {
     private contiguous: boolean
     private sn: number
     private timestamp: number
-    private H264_TIMEBASE: number
     private _avcTrack: MP4.VideoTrack
     private browserType: number
 
     constructor(config: H264DemuxerConfig) {
         this.config = config
         //this.wfs = wfs;
-
+        
         //this.remuxer = new MP4Remuxer(this.config)
         this.contiguous = true
         this.sn = 0
         this.timestamp = 0
-        this.H264_TIMEBASE = 3000
         this._avcTrack = {
             type: 'video',
             id: 1,
@@ -54,13 +54,13 @@ export class H264Demuxer {
     destroy() {}
 
     getTimestampM() {
-        this.timestamp += this.H264_TIMEBASE
+        this.timestamp += this.config.timeBase
         return this.timestamp
     }
 
     pushData(data: Uint8Array) {
         this._parseAVCTrack(data)
-        if (this.browserType === 1 || this._avcTrack.samples.length >= 1) {
+        if (this.browserType === 1 || this._avcTrack.samples.length >= 3) {
             // Firefox
             this.config.onVideo(this.sn, this._avcTrack)
             this.sn += 1

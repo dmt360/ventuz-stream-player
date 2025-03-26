@@ -613,18 +613,14 @@ export function avc1(track: VideoTrack) {
     for (let i = 0; i < track.sps!.length; i++) {
         const data = track.sps![i]
         const len = data.byteLength
-        sps.push((len >>> 8) & 0xff)
-        sps.push(len & 0xff)
-        sps = [...sps, ...data]
+        sps = [...sps, (len >>> 8) & 0xff, len & 0xff, ...data]
     }
 
     // assemble the PPSs
     for (let i = 0; i < track.pps!.length; i++) {
         const data = track.pps![i]
         const len = data.byteLength
-        pps.push((len >>> 8) & 0xff)
-        pps.push(len & 0xff)
-        sps = [...pps, ...data]
+        pps = [...pps, (len >>> 8) & 0xff, len & 0xff, ...data]
     }
 
     const avcc = box(types.avcC, [
