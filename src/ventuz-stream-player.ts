@@ -1,11 +1,12 @@
-import * as Mp4Muxer from 'mp4-muxer'
-
+import { H264Demuxer } from "./muxer/h264-demuxer"
+import { SlicesReader } from "./muxer/h264-nal-slicesreader"
+import { MP4Remuxer } from "./muxer/mp4-remuxer"
 class VentuzStreamPlayer extends HTMLElement {
     static observedAttributes = ['url']
 
     url: string
     private ws: WebSocket | undefined
-    private muxer: Mp4Muxer.Muxer<Mp4Muxer.StreamTarget> | undefined
+    //private muxer: Mp4Muxer.Muxer<Mp4Muxer.StreamTarget> | undefined
     private streamHeader: StreamOut.StreamHeader | undefined
     private frameHeader: StreamOut.FrameHeader | undefined
     private mediaSource: MediaSource | undefined
@@ -13,16 +14,21 @@ class VentuzStreamPlayer extends HTMLElement {
     private video: HTMLVideoElement | undefined
     private queue: Uint8Array[] = []
 
-    private openStream() {
+    private slicesReader: SlicesReader | undefined;
+    private h264Demuxer: H264Demuxer | undefined;
+    private mp4Remuxer: MP4Remuxer | undefined;
+
+    private openStream(hdr: StreamOut.StreamHeader) {
         console.log('openStream')
         this.closeStream()
 
-        if (!this.video || !this.streamHeader) return
+        if (!this.video) return
+        this.streamHeader = hdr;
 
-        this.mediaSource = new MediaSource()
+        const mediaSource = this.mediaSource = new MediaSource()
         this.mediaSource.onsourceopen = () => {
             console.log('source open')
-            this.vidSrcBuffer = this.mediaSource!.addSourceBuffer(
+            this.vidSrcBuffer = mediaSource.addSourceBuffer(
                 'video/mp4; codecs="avc1.640C20"'
             )
             this.vidSrcBuffer.onerror = (e) => {
@@ -36,31 +42,37 @@ class VentuzStreamPlayer extends HTMLElement {
             this.handleQueue()
         }
 
-        this.video.src = URL.createObjectURL(this.mediaSource)
+        this.video.src = URL.createObjectURL(mediaSource)
         this.video.width = this.streamHeader.videoWidth
         this.video.height = this.streamHeader.videoHeight
         this.video.tabIndex = 0
 
-        this.muxer = new Mp4Muxer.Muxer({
-            target: new Mp4Muxer.StreamTarget({
-                onData: (data, _) => this.onMuxerData(data),
-            }),
-            fastStart: 'fragmented',
-            firstTimestampBehavior: 'offset',
-            video: {
-                codec: 'avc',
-                width: this.streamHeader.videoWidth,
-                height: this.streamHeader.videoHeight,
-                frameRate:
-                    this.streamHeader.videoFrameRateNum /
-                    this.streamHeader.videoFrameRateDen,
+        this.mp4Remuxer = new MP4Remuxer({
+            //maxBufferHole: 0,
+            //maxSeekHole: 0,
+            //stretchShortVideoTrack: false,
+
+            onInitSegment: is => {
+                console.log("got is", is);
             },
-            minFragmentDuration: 0,
-        })
+
+            onData: data => {
+                console.log("got data", data)
+            }
+
+        });
+
+        this.h264Demuxer = new H264Demuxer({
+            forceKeyFrameOnDiscontinuity: false,
+            onVideo: (sn, track) => this.mp4Remuxer?.pushVideo(sn, track)                    
+        });
+
+        this.slicesReader = new SlicesReader({
+            onNal: data => this.h264Demuxer?.pushData(data)
+        });   
     }
 
     private closeStream() {
-        if (!this.muxer) return
         console.log('closeStream')
 
         this.queue.length = 0
@@ -69,7 +81,9 @@ class VentuzStreamPlayer extends HTMLElement {
         if (this.video) this.video.src = ''
         delete this.mediaSource
 
-        delete this.muxer
+        delete this.mp4Remuxer
+        delete this.h264Demuxer
+        delete this.slicesReader
 
         delete this.frameHeader
         delete this.streamHeader
@@ -101,8 +115,7 @@ class VentuzStreamPlayer extends HTMLElement {
         switch (pkg.type) {
             case 'connected':
                 // create and connect muxer
-                this.streamHeader = pkg.data
-                this.openStream()
+                this.openStream(pkg.data)
                 break
             case 'disconnected':
                 this.closeStream()
@@ -120,36 +133,9 @@ class VentuzStreamPlayer extends HTMLElement {
     }
 
     private handleVideoFrame(data: Uint8Array) {
-        if (this.muxer && this.streamHeader && this.frameHeader) {
-            const key = true // this.frameHeader.flags === "keyFrame";
-            const dur =
-                (1000000 * this.streamHeader.videoFrameRateDen) /
-                this.streamHeader.videoFrameRateNum
-            const ts = this.frameHeader.frameIndex * dur
-
-            //console.log("send", data.length, key ? "key" : "delta", ts, dur, meta);
-
-            const meta: EncodedVideoChunkMetadata = {
-                decoderConfig: {
-                    codec: 'avc1',
-                    codedWidth: this.streamHeader.videoWidth,
-                    codedHeight: this.streamHeader.videoHeight,
-                    colorSpace: {},
-                    optimizeForLatency: true,
-                },
-            }
-            // const meta = null;
-            this.muxer.addVideoChunkRaw(
-                data,
-                key ? 'key' : 'delta',
-                ts,
-                dur,
-                meta
-            )
-
+        if (this.slicesReader && this.streamHeader && this.frameHeader) {
+            this.slicesReader!.read(data);
             delete this.frameHeader
-
-            this.video?.play()
         }
     }
 
@@ -212,22 +198,22 @@ class VentuzStreamPlayer extends HTMLElement {
     connectedCallback() {
         console.log('connectedCallback')
     
-        this.video = document.createElement('video')
-        this.video.autoplay = true
-        this.video.width = 640
-        this.video.height = 360
-        this.video.style.touchAction = 'none'
+        const video = this.video = document.createElement('video')
+        video.autoplay = true
+        video.width = 640
+        video.height = 360
+        video.style.touchAction = 'none'
 
         const getIntXY = (x: number, y: number) => {
-            var rect = this.video!.getBoundingClientRect()
+            var rect = video.getBoundingClientRect()
             return { x: Math.round(x - rect.left), y: Math.round(y - rect.top) }
         }
 
-        this.video.onpointerdown = (e) => {
+        video.onpointerdown = (e) => {
             if (e.pointerType === 'mouse') {
                 // turns out JS and the stream device use the same order of buttons, so no mapping necessary here
                 this.sendCommand({ type: 'mouseButtons', data: e.buttons })
-                this.video!.setPointerCapture(e.pointerId)
+                video.setPointerCapture(e.pointerId)
             }
 
             if (e.pointerType === 'touch') {
@@ -240,17 +226,17 @@ class VentuzStreamPlayer extends HTMLElement {
                 })
             }
 
-            this.video!.focus()
+            video.focus()
 
             e.stopPropagation()
             e.preventDefault()
         }
 
-        this.video.onpointerup = (e) => {
+        video.onpointerup = (e) => {
             if (e.pointerType === 'mouse') {
                 // turns out JS and the stream device use the same order of buttons, so no mapping necessary here
                 this.sendCommand({ type: 'mouseButtons', data: e.buttons })
-                this.video!.releasePointerCapture(e.pointerId)
+                video.releasePointerCapture(e.pointerId)
             }
 
             if (e.pointerType === 'touch') {
@@ -267,7 +253,7 @@ class VentuzStreamPlayer extends HTMLElement {
             e.preventDefault()
         }
 
-        this.video.onpointermove = (e) => {
+        video.onpointermove = (e) => {
             if (e.pointerType === 'mouse') {
                 this.sendCommand({
                     type: 'mouseMove',
@@ -289,13 +275,13 @@ class VentuzStreamPlayer extends HTMLElement {
             e.preventDefault()
         }
 
-        this.video.onpointerover = (e) => {
+        video.onpointerover = (e) => {
             //console.log("over", e);
             e.stopPropagation()
             e.preventDefault()
         }
 
-        this.video.onpointercancel = (e) => {
+        video.onpointercancel = (e) => {
             if (e.pointerType === 'touch') {
                 this.sendCommand({
                     type: 'touchCancel',
@@ -310,7 +296,7 @@ class VentuzStreamPlayer extends HTMLElement {
             e.preventDefault()
         }
 
-        this.video.onpointerout = (e) => {
+        video.onpointerout = (e) => {
             if (e.pointerType === 'touch') {
                 this.sendCommand({
                     type: 'touchCancel',
@@ -325,7 +311,7 @@ class VentuzStreamPlayer extends HTMLElement {
             e.preventDefault()
         }
 
-        this.video.onwheel = (e) => {
+        video.onwheel = (e) => {
             this.sendCommand({
                 type: 'mouseWheel',
                 data: { x: -e.deltaX, y: -e.deltaY },
@@ -334,29 +320,29 @@ class VentuzStreamPlayer extends HTMLElement {
             e.preventDefault()
         }
 
-        this.video.onclick = (e) => {
+        video.onclick = (e) => {
             e.stopPropagation()
             e.preventDefault()
         }
 
-        this.video.oncontextmenu = (e) => {
+        video.oncontextmenu = (e) => {
             e.stopPropagation()
             e.preventDefault()
         }
 
-        this.video.onkeypress = (e) => {
+        video.onkeypress = (e) => {
             // console.log("press", e);
             e.stopPropagation()
             e.preventDefault()
         }
 
-        this.video.onkeyup = (e) => {
+        video.onkeyup = (e) => {
             this.sendCommand({ type: 'keyUp', data: e.keyCode })
             e.stopPropagation()
             e.preventDefault()
         }
 
-        this.video.onkeydown = (e) => {
+        video.onkeydown = (e) => {
             //console.log(e);
             this.sendCommand({ type: 'keyDown', data: e.keyCode })
             this.sendCommand({
@@ -367,7 +353,7 @@ class VentuzStreamPlayer extends HTMLElement {
             e.preventDefault()
         }
 
-        this.appendChild(this.video)
+        this.appendChild(video)
         this.openWS()
     }
 
