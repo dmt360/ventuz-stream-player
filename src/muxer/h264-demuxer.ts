@@ -7,6 +7,7 @@ import { logger } from './logger'
 
 export type H264DemuxerConfig = {
   forceKeyFrameOnDiscontinuity: boolean,
+  onBufferReset(codec: string): void,
   onVideo(sn: number, track: MP4.VideoTrack): void,
 }
 
@@ -43,8 +44,6 @@ export class H264Demuxer {
             duration: 0,
             width: 0,
             height: 0,
-            pps: [],
-            sps: [],            
         }
         this.browserType = 0
         if (navigator.userAgent.toLowerCase().indexOf('firefox') !== -1) {
@@ -61,7 +60,7 @@ export class H264Demuxer {
 
     pushData(data: Uint8Array) {
         this._parseAVCTrack(data)
-        if (this.browserType === 1 || this._avcTrack.samples.length >= 20) {
+        if (this.browserType === 1 || this._avcTrack.samples.length >= 1) {
             // Firefox
             this.config.onVideo(this.sn, this._avcTrack)
             this.sn += 1
@@ -157,8 +156,7 @@ export class H264Demuxer {
                             codecstring += h
                         }
                         track.codec = codecstring
-                        //TODO
-                        // this.wfs.trigger(Event.BUFFER_RESET, { mimeType: track.codec, })
+                        this.config.onBufferReset(track.codec);
                         push = true
                     }
                     break

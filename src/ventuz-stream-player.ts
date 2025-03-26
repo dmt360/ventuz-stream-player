@@ -1,12 +1,11 @@
-import { H264Demuxer } from "./muxer/h264-demuxer"
-import { SlicesReader } from "./muxer/h264-nal-slicesreader"
-import { MP4Remuxer } from "./muxer/mp4-remuxer"
+import { H264Demuxer } from './muxer/h264-demuxer'
+import { SlicesReader } from './muxer/h264-nal-slicesreader'
+import { MP4Remuxer } from './muxer/mp4-remuxer'
 class VentuzStreamPlayer extends HTMLElement {
     static observedAttributes = ['url']
 
     url: string
     private ws: WebSocket | undefined
-    //private muxer: Mp4Muxer.Muxer<Mp4Muxer.StreamTarget> | undefined
     private streamHeader: StreamOut.StreamHeader | undefined
     private frameHeader: StreamOut.FrameHeader | undefined
     private mediaSource: MediaSource | undefined
@@ -14,72 +13,105 @@ class VentuzStreamPlayer extends HTMLElement {
     private video: HTMLVideoElement | undefined
     private queue: Uint8Array[] = []
 
-    private slicesReader: SlicesReader | undefined;
-    private h264Demuxer: H264Demuxer | undefined;
-    private mp4Remuxer: MP4Remuxer | undefined;
+    private slicesReader: SlicesReader | undefined
+    private h264Demuxer: H264Demuxer | undefined
+    private mp4Remuxer: MP4Remuxer | undefined
 
-    private openStream(hdr: StreamOut.StreamHeader) {
-        console.log('openStream')
-        this.closeStream()
+    private codec: string | undefined
 
-        if (!this.video) return
-        this.streamHeader = hdr;
+    private sent = 0;
 
-        const mediaSource = this.mediaSource = new MediaSource()
-        this.mediaSource.onsourceopen = () => {
-            console.log('source open')
-            this.vidSrcBuffer = mediaSource.addSourceBuffer(
-                'video/mp4; codecs="avc1.640C20"'
+    private createSrcBuffer() {
+        if (this.mediaSource) {
+            if (this.vidSrcBuffer)
+                this.mediaSource.removeSourceBuffer(this.vidSrcBuffer)
+
+            this.vidSrcBuffer = this.mediaSource.addSourceBuffer(
+                `video/mp4; codecs="${this.codec}"`
             )
             this.vidSrcBuffer.onerror = (e) => {
                 console.error('vid source error', e)
                 this.closeStream()
             }
             this.vidSrcBuffer.onupdateend = () => {
-                console.log('updateend')
+                //                console.log('updateend')
                 this.handleQueue()
             }
+
+            this.sent = 0;
             this.handleQueue()
         }
+    }
 
-        this.video.src = URL.createObjectURL(mediaSource)
-        this.video.width = this.streamHeader.videoWidth
-        this.video.height = this.streamHeader.videoHeight
-        this.video.tabIndex = 0
+    private openStream(hdr: StreamOut.StreamHeader) {
+        console.log('openStream')
+        this.closeStream()
+
+        this.streamHeader = hdr
 
         this.mp4Remuxer = new MP4Remuxer({
-            //maxBufferHole: 0,
-            //maxSeekHole: 0,
-            //stretchShortVideoTrack: false,
+            onInitSegment: (is) => {
+                console.log('got is', is)
 
-            onInitSegment: is => {
-                console.log("got is", is);
+                if (this.mediaSource) delete this.mediaSource
+
+                const mediaSource = (this.mediaSource = new MediaSource())
+                mediaSource.onsourceopen = () => {
+                    console.log('source open')
+                    this.createSrcBuffer()
+                }
+
+                if (this.video) {
+                    this.video.src = URL.createObjectURL(mediaSource)
+                    this.video.width = is.metadata.width
+                    this.video.height = is.metadata.height
+                    this.video.tabIndex = 0
+
+                    this.video.onerror = (e) =>
+                    {
+                        console.error('video error', e)                        
+                    }
+
+                }
+
+                this.onMuxerData(is.data)
             },
 
-            onData: data => {
-                console.log("got data", data)
-            }
-
-        });
+            onData: (data) => {
+                //console.log("got data", data)
+                this.onMuxerData(data)              
+            },
+        })
 
         this.h264Demuxer = new H264Demuxer({
             forceKeyFrameOnDiscontinuity: false,
-            onVideo: (sn, track) => this.mp4Remuxer?.pushVideo(sn, track)                    
-        });
+
+            onBufferReset: (codec) => {
+                this.codec = codec
+                this.createSrcBuffer()
+            },
+
+            onVideo: (sn, track) => {
+                this.mp4Remuxer?.pushVideo(sn, track)
+            },
+        })
 
         this.slicesReader = new SlicesReader({
-            onNal: data => this.h264Demuxer?.pushData(data)
-        });   
+            onNal: (data) => this.h264Demuxer?.pushData(data),
+        })
     }
 
     private closeStream() {
         console.log('closeStream')
 
         this.queue.length = 0
-        delete this.vidSrcBuffer
 
-        if (this.video) this.video.src = ''
+        if (this.mediaSource && this.video)
+        {
+            URL.revokeObjectURL(this.video.src)
+        }
         delete this.mediaSource
+        delete this.vidSrcBuffer
 
         delete this.mp4Remuxer
         delete this.h264Demuxer
@@ -95,7 +127,15 @@ class VentuzStreamPlayer extends HTMLElement {
         if (this.vidSrcBuffer && !this.vidSrcBuffer.updating) {
             console.log('add', data.length)
             this.vidSrcBuffer.appendBuffer(data)
-            console.log('add done', data.length)
+            if (++this.sent == 3) {
+                try {
+                    this.video?.play();
+                }
+                catch {
+                    
+                }
+            }        
+            //            console.log('add done', data.length)
         } else {
             //console.log("q mp4", data.length);
             this.queue.push(data)
@@ -107,7 +147,15 @@ class VentuzStreamPlayer extends HTMLElement {
             const data = this.queue.shift()!
             console.log('dq', data.length)
             this.vidSrcBuffer.appendBuffer(data)
-            console.log('dq done', data.length)
+            if (++this.sent == 3) {
+                try {
+                    this.video?.play();
+                }
+                catch {
+
+                }
+            }        
+            //            console.log('dq done', data.length)
         }
     }
 
@@ -134,7 +182,7 @@ class VentuzStreamPlayer extends HTMLElement {
 
     private handleVideoFrame(data: Uint8Array) {
         if (this.slicesReader && this.streamHeader && this.frameHeader) {
-            this.slicesReader!.read(data);
+            this.slicesReader!.read(data)
             delete this.frameHeader
         }
     }
@@ -197,8 +245,8 @@ class VentuzStreamPlayer extends HTMLElement {
 
     connectedCallback() {
         console.log('connectedCallback')
-    
-        const video = this.video = document.createElement('video')
+
+        const video = (this.video = document.createElement('video'))
         video.autoplay = true
         video.width = 640
         video.height = 360

@@ -68,8 +68,8 @@ export type VideoTrack = TrackBase & {
 
     samples: VideoSample[]
     
-    sps: Uint8Array[]
-    pps: Uint8Array[]
+    sps?: Uint8Array[]
+    pps?: Uint8Array[]
 }
 
 /*
@@ -610,8 +610,8 @@ export function avc1(track: VideoTrack) {
 
     // assemble the SPSs
 
-    for (let i = 0; i < track.sps.length; i++) {
-        const data = track.sps[i]
+    for (let i = 0; i < track.sps!.length; i++) {
+        const data = track.sps![i]
         const len = data.byteLength
         sps.push((len >>> 8) & 0xff)
         sps.push(len & 0xff)
@@ -619,8 +619,8 @@ export function avc1(track: VideoTrack) {
     }
 
     // assemble the PPSs
-    for (let i = 0; i < track.pps.length; i++) {
-        const data = track.pps[i]
+    for (let i = 0; i < track.pps!.length; i++) {
+        const data = track.pps![i]
         const len = data.byteLength
         pps.push((len >>> 8) & 0xff)
         pps.push(len & 0xff)
@@ -635,11 +635,11 @@ export function avc1(track: VideoTrack) {
                     sps[4], // profile compat
                     sps[5], // level
                     0xfc | 3, // lengthSizeMinusOne, hard-coded to 4 bytes
-                    0xe0 | track.sps.length, // 3bit reserved (111) + numOfSequenceParameterSets
+                    0xe0 | track.sps!.length, // 3bit reserved (111) + numOfSequenceParameterSets
                 ]
                     .concat(sps)
                     .concat([
-                        track.pps.length, // numOfPictureParameterSets
+                        track.pps!.length, // numOfPictureParameterSets
                     ])
                     .concat(pps)
             ),
