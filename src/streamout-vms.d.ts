@@ -39,6 +39,7 @@ declare namespace StreamOut {
     type TouchPara = { id: number, x: number, y: number };
     
     type Command =
+        { type: "requestIDRFrame"} |
         { type: "mouseMove", data: MouseXYPara } |
         { type: "mouseButtons", data: MouseButtonEnum } |
         { type: "mouseWheel", data: MouseXYPara } |

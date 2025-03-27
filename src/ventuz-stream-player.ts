@@ -28,6 +28,7 @@ class VentuzStreamPlayer extends HTMLElement {
     private mediaSource: MediaSource | undefined;
     private vidSrcBuffer: SourceBuffer | undefined;
     private playCountDown = 0;
+    private lastKeyFrameIndex = 0;
 
     private video: HTMLVideoElement | undefined;
     private statusLine: HTMLDivElement | undefined;
@@ -67,6 +68,7 @@ class VentuzStreamPlayer extends HTMLElement {
         this.closeStream();
 
         this.streamHeader = hdr;
+        this.lastKeyFrameIndex = -1;
         while (hdr.videoFrameRateDen < 1000) {
             hdr.videoFrameRateNum *= 10;
             hdr.videoFrameRateDen *= 10;
@@ -203,6 +205,17 @@ class VentuzStreamPlayer extends HTMLElement {
     private handleVideoFrame(data: Uint8Array) {
         if (this.slicesReader && this.streamHeader && this.frameHeader) {
             this.slicesReader!.read(data);
+
+            // make sure we get a keyframe at least every 4 seconds so we can throw away old frames
+            if (this.frameHeader.flags === "keyFrame") {
+                this.lastKeyFrameIndex = this.frameHeader.frameIndex
+            }
+            else if (this.frameHeader.frameIndex - this.lastKeyFrameIndex > (4 * this.streamHeader.videoFrameRateNum / this.streamHeader.videoFrameRateDen)) { 
+                logger.log("requesting IDR frame");
+                this.lastKeyFrameIndex = this.frameHeader.frameIndex;
+                this.sendCommand({ type: "requestIDRFrame" });
+            }
+
             delete this.frameHeader;
         }
     }
