@@ -11,7 +11,8 @@ export default {
     build: {
         assetsDir: '.',
         outDir: 'dist',
-
+        sourcemap: true,
+        
         rollupOptions: {
             output: {
                 entryFileNames: 'ventuz-stream-player-min.js'

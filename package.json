@@ -6,6 +6,7 @@
   "description": "A web component for showing and interacting with Ventuz Stream Out outputs",
   "homepage": "https://github.com/VentuzTechnology/streamout-webcomponent",
   "type": "module",
+  "main": "./dist/ventuz-stream-player-min.js",
   "devDependencies": {
     "typescript": "~5.7.2",
     "vite": "^6.2.0",

@@ -1,6 +1,7 @@
 ventuz-stream-player { 
     display: block; 
     background-color: black;
+    position:relative;
 } 
 
 ventuz-stream-player video { 
