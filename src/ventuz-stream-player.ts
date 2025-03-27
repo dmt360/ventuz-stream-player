@@ -135,11 +135,16 @@ class VentuzStreamPlayer extends HTMLElement {
             // Remove old frames from the buffer
             if (this.vidSrcBuffer.buffered.length > 0) {
                 const start = this.vidSrcBuffer.buffered.start(0);
+                const end = this.vidSrcBuffer.buffered.end(0);
                 const currentTime = this.video?.currentTime ?? 0;
                 const bufferThreshold = 5;
 
                 if (currentTime - start >= 2 * bufferThreshold) {
-                    console.log('remove', start, currentTime - bufferThreshold);
+                    if (end > currentTime + 0.3) {
+                        console.log('jump!', currentTime, end);
+                        this.video!.currentTime = end;
+                    }
+                    //console.log('remove', start, currentTime - bufferThreshold);
                     this.vidSrcBuffer.remove(start, currentTime - bufferThreshold);
                     return;
                 }
