@@ -1,0 +1,10 @@
+ventuz-stream-player { 
+    display: block; 
+    background-color: black;
+} 
+
+ventuz-stream-player video { 
+  display: block; 
+  height: 100%;
+  width: 100%;
+}

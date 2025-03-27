@@ -1,35 +1,34 @@
 /**
 
 */
-import { ExpGolomb } from './exp-golomb'
-import * as MP4 from './mp4-generator'
-import { logger } from './logger'
+import { ExpGolomb } from './exp-golomb';
+import * as MP4 from './mp4-generator';
+import { logger } from './logger';
 
 export type H264DemuxerConfig = {
-  forceKeyFrameOnDiscontinuity: boolean,
-  timeBase: number,
-  onBufferReset(codec: string): void,
-  onVideo(sn: number, track: MP4.VideoTrack): void,
-}
-
+    forceKeyFrameOnDiscontinuity: boolean;
+    timeBase: number;
+    onBufferReset(codec: string): void;
+    onVideo(sn: number, track: MP4.Track): void;
+};
 
 export class H264Demuxer {
-    private config: H264DemuxerConfig
+    private config: H264DemuxerConfig;
     //private remuxer: MP4Remuxer
-    private contiguous: boolean
-    private sn: number
-    private timestamp: number
-    private _avcTrack: MP4.VideoTrack
-    private browserType: number
+    private contiguous: boolean;
+    private sn: number;
+    private timestamp: number;
+    private _avcTrack: MP4.Track;
+    private browserType: number;
 
     constructor(config: H264DemuxerConfig) {
-        this.config = config
+        this.config = config;
         //this.wfs = wfs;
-        
+
         //this.remuxer = new MP4Remuxer(this.config)
-        this.contiguous = true
-        this.sn = 0
-        this.timestamp = 0
+        this.contiguous = true;
+        this.sn = 0;
+        this.timestamp = 0;
         this._avcTrack = {
             type: 'video',
             id: 1,
@@ -44,26 +43,26 @@ export class H264Demuxer {
             duration: 0,
             width: 0,
             height: 0,
-        }
-        this.browserType = 0
+        };
+        this.browserType = 0;
         if (navigator.userAgent.toLowerCase().indexOf('firefox') !== -1) {
-            this.browserType = 1
+            this.browserType = 1;
         }
     }
 
     destroy() {}
 
     getTimestampM() {
-        this.timestamp += this.config.timeBase
-        return this.timestamp
+        this.timestamp += this.config.timeBase;
+        return this.timestamp;
     }
 
     pushData(data: Uint8Array) {
-        this._parseAVCTrack(data)
+        this._parseAVCTrack(data);
         if (this.browserType === 1 || this._avcTrack.samples.length >= 3) {
             // Firefox
-            this.config.onVideo(this.sn, this._avcTrack)
-            this.sn += 1
+            this.config.onVideo(this.sn, this._avcTrack);
+            this.sn += 1;
         }
     }
 
@@ -78,8 +77,8 @@ export class H264Demuxer {
             expGolombDecoder,
             avcSample: MP4.VideoSample,
             push: boolean,
-            i
-        var debugString = ''
+            i;
+        var debugString = '';
         var pushAccesUnit = () => {
             if (units2.length) {
                 if (
@@ -87,7 +86,7 @@ export class H264Demuxer {
                     key === true ||
                     (track.sps && (samples.length || this.contiguous))
                 ) {
-                    var tss = this.getTimestampM()
+                    var tss = this.getTimestampM();
                     avcSample = {
                         units: { units: units2 },
                         pts: tss,
@@ -95,160 +94,157 @@ export class H264Demuxer {
                         key: key,
                         cts: 0,
                         duration: 0,
-                        flags: {dependsOn: 0, isNonSync: 0 },
+                        flags: { dependsOn: 0, isNonSync: 0 },
                         size: length,
-                    }
-                    samples.push(avcSample)
-                    track.len += length
-                    track.nbNalu += units2.length
+                    };
+                    samples.push(avcSample);
+                    track.len += length;
+                    track.nbNalu += units2.length;
                 } else {
-                    track.dropped++
+                    track.dropped++;
                 }
-                units2 = []
-                length = 0
+                units2 = [];
+                length = 0;
             }
-        }
+        };
 
         units.forEach((unit) => {
             switch (unit.type) {
                 //NDR
                 case 1:
-                    push = true
+                    push = true;
                     if (debug) {
-                        debugString += 'NDR '
+                        debugString += 'NDR ';
                     }
-                    break
+                    break;
                 //IDR
                 case 5:
-                    push = true
+                    push = true;
                     if (debug) {
-                        debugString += 'IDR '
+                        debugString += 'IDR ';
                     }
-                    key = true
-                    break
+                    key = true;
+                    break;
                 //SEI
                 case 6:
-                    unit.data = this.discardEPB(unit.data)
-                    expGolombDecoder = new ExpGolomb(unit.data)
+                    unit.data = this.discardEPB(unit.data);
+                    expGolombDecoder = new ExpGolomb(unit.data);
                     // skip frameType
-                    expGolombDecoder.readUByte()
-                    break
+                    expGolombDecoder.readUByte();
+                    break;
                 //SPS
                 case 7:
-                    push = false
+                    push = false;
                     if (debug) {
-                        debugString += 'SPS '
+                        debugString += 'SPS ';
                     }
                     if (!track.sps) {
-                        expGolombDecoder = new ExpGolomb(unit.data)
-                        var config = expGolombDecoder.readSPS()
-                        track.width = config.width
-                        track.height = config.height
-                        track.sps = [unit.data]
-                        track.duration = 0
-                        var codecarray = unit.data.subarray(1, 4)
-                        var codecstring = 'avc1.'
+                        expGolombDecoder = new ExpGolomb(unit.data);
+                        var config = expGolombDecoder.readSPS();
+                        track.width = config.width;
+                        track.height = config.height;
+                        track.sps = [unit.data];
+                        track.duration = 0;
+                        var codecarray = unit.data.subarray(1, 4);
+                        var codecstring = 'avc1.';
                         for (i = 0; i < 3; i++) {
-                            var h = codecarray[i].toString(16)
+                            var h = codecarray[i].toString(16);
                             if (h.length < 2) {
-                                h = '0' + h
+                                h = '0' + h;
                             }
-                            codecstring += h
+                            codecstring += h;
                         }
-                        track.codec = codecstring
+                        track.codec = codecstring;
                         this.config.onBufferReset(track.codec);
-                        push = true
+                        push = true;
                     }
-                    break
+                    break;
                 //PPS
                 case 8:
-                    push = false
+                    push = false;
                     if (debug) {
-                        debugString += 'PPS '
+                        debugString += 'PPS ';
                     }
                     if (!track.pps) {
-                        track.pps = [unit.data]
-                        push = true
+                        track.pps = [unit.data];
+                        push = true;
                     }
-                    break
+                    break;
                 case 9:
-                    push = false
+                    push = false;
                     if (debug) {
-                        debugString += 'AUD '
+                        debugString += 'AUD ';
                     }
-                    pushAccesUnit()
-                    break
+                    pushAccesUnit();
+                    break;
                 default:
-                    push = false
-                    debugString += 'unknown NAL ' + unit.type + ' '
-                    break
+                    push = false;
+                    debugString += 'unknown NAL ' + unit.type + ' ';
+                    break;
             }
 
             if (push) {
-                units2.push(unit)
-                length += unit.data.byteLength
+                units2.push(unit);
+                length += unit.data.byteLength;
             }
-        })
+        });
 
         if (debug || debugString.length) {
-            logger.log(debugString)
+            logger.log(debugString);
         }
 
-        pushAccesUnit()
+        pushAccesUnit();
     }
 
     _parseAVCNALu(array: Uint8Array) {
         var i = 0,
             len = array.byteLength,
             value,
-            state = 0 //state = this.avcNaluState;
+            state = 0; //state = this.avcNaluState;
         var units = [],
             unit,
             unitType,
             lastUnitStart,
-            lastUnitType
+            lastUnitType;
         while (i < len) {
-            value = array[i++]
+            value = array[i++];
             // finding 3 or 4-byte start codes (00 00 01 OR 00 00 00 01)
             switch (state) {
                 case 0:
                     if (value === 0) {
-                        state = 1
+                        state = 1;
                     }
-                    break
+                    break;
                 case 1:
                     if (value === 0) {
-                        state = 2
+                        state = 2;
                     } else {
-                        state = 0
+                        state = 0;
                     }
-                    break
+                    break;
                 case 2:
                 case 3:
                     if (value === 0) {
-                        state = 3
+                        state = 3;
                     } else if (value === 1 && i < len) {
-                        unitType = array[i] & 0x1f
+                        unitType = array[i] & 0x1f;
                         if (lastUnitStart) {
                             unit = {
-                                data: array.subarray(
-                                    lastUnitStart,
-                                    i - state - 1
-                                ),
+                                data: array.subarray(lastUnitStart, i - state - 1),
                                 type: lastUnitType,
-                            }
-                            units.push(unit)
+                            };
+                            units.push(unit);
                         } else {
                         }
-                        lastUnitStart = i
-                        lastUnitType = unitType
-                        state = 0
+                        lastUnitStart = i;
+                        lastUnitType = unitType;
+                        state = 0;
                     } else {
-                        state = 0
+                        state = 0;
                     }
-                    break
+                    break;
                 default:
-                    break
+                    break;
             }
         }
 
@@ -257,11 +253,11 @@ export class H264Demuxer {
                 data: array.subarray(lastUnitStart, len),
                 type: lastUnitType,
                 state: state,
-            }
-            units.push(unit)
+            };
+            units.push(unit);
         }
 
-        return units
+        return units;
     }
 
     /**
@@ -272,35 +268,35 @@ export class H264Demuxer {
             EPBPositions = [],
             i = 1,
             newLength,
-            newData
+            newData;
         // Find all `Emulation Prevention Bytes`
         while (i < length - 2) {
             if (data[i] === 0 && data[i + 1] === 0 && data[i + 2] === 0x03) {
-                EPBPositions.push(i + 2)
-                i += 2
+                EPBPositions.push(i + 2);
+                i += 2;
             } else {
-                i++
+                i++;
             }
         }
         // If no Emulation Prevention Bytes were found just return the original
         // array
         if (EPBPositions.length === 0) {
-            return data
+            return data;
         }
         // Create a new array to hold the NAL unit data
-        newLength = length - EPBPositions.length
-        newData = new Uint8Array(newLength)
-        var sourceIndex = 0
+        newLength = length - EPBPositions.length;
+        newData = new Uint8Array(newLength);
+        var sourceIndex = 0;
 
         for (i = 0; i < newLength; sourceIndex++, i++) {
             if (sourceIndex === EPBPositions[0]) {
                 // Skip this byte
-                sourceIndex++
+                sourceIndex++;
                 // Remove this position index
-                EPBPositions.shift()
+                EPBPositions.shift();
             }
-            newData[i] = data[sourceIndex]
+            newData[i] = data[sourceIndex];
         }
-        return newData
+        return newData;
     }
 }
