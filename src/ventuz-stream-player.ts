@@ -2,6 +2,7 @@ import { H264Demuxer } from './muxer/h264-demuxer';
 import { SlicesReader } from './muxer/h264-nal-slicesreader';
 import { MP4Remuxer } from './muxer/mp4-remuxer';
 import './style.css';
+
 class VentuzStreamPlayer extends HTMLElement {
     static observedAttributes = ['url'];
 
@@ -66,8 +67,6 @@ class VentuzStreamPlayer extends HTMLElement {
 
                 if (this.video) {
                     this.video.src = URL.createObjectURL(mediaSource);
-                    this.video.width = is.metadata.width;
-                    this.video.height = is.metadata.height;
                     this.video.tabIndex = 0;
 
                     this.video.onerror = (e) => {
@@ -221,14 +220,7 @@ class VentuzStreamPlayer extends HTMLElement {
 
     constructor() {
         super();
-        this.url = '';
-
-        const style = document.createElement('style');
-        style.textContent = `
-            
-        `;
-
-        this.appendChild(style);
+        this.url = '';    
     }
 
     //-------------------------------------------------------------------------------------------
@@ -248,10 +240,8 @@ class VentuzStreamPlayer extends HTMLElement {
 
         const video = (this.video = document.createElement('video'));
         video.autoplay = true;
-        video.width = 640;
-        video.height = 360;
         video.style.touchAction = 'none';
-        video.controls = true;
+        video.controls = false;
 
         const getIntXY = (x: number, y: number) => {
             var rect = video.getBoundingClientRect();
@@ -404,6 +394,17 @@ class VentuzStreamPlayer extends HTMLElement {
             });
             e.stopPropagation();
             e.preventDefault();
+        };
+
+        video.onplaying = (_) => {
+            if (this.vidSrcBuffer) {
+                const end = this.vidSrcBuffer.buffered.end(0);
+                const currentTime = this.video?.currentTime ?? 0;
+                if (end > currentTime + 0.3) {
+                    console.log('jump!', currentTime, end);
+                    video.currentTime = end;
+                }
+            }
         };
 
         this.appendChild(video);
