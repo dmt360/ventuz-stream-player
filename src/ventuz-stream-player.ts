@@ -78,10 +78,10 @@ class VentuzStreamPlayer extends HTMLElement {
             onInitSegment: (is) => {
                 logger.log("got is", is);
 
-                if (this.mediaSource) delete this.mediaSource;
+                delete this.mediaSource;
 
                 const mediaSource = (this.mediaSource = new MediaSource());
-                mediaSource.setLiveSeekableRange;
+
                 mediaSource.onsourceopen = () => {
                     mediaSource.duration = Infinity;
                     logger.log("source open");
@@ -160,7 +160,7 @@ class VentuzStreamPlayer extends HTMLElement {
                 const bufferThreshold = 5;
 
                 if (currentTime - start >= 2 * bufferThreshold) {
-                    if (end > currentTime + 0.3) {
+                    if (end > currentTime + 0.25) {
                         logger.log("jump!", currentTime, end);
                         this.video!.currentTime = end;
                     }
@@ -286,7 +286,7 @@ class VentuzStreamPlayer extends HTMLElement {
             if (this.vidSrcBuffer) {
                 const end = this.vidSrcBuffer.buffered.end(0);
                 const currentTime = this.video?.currentTime ?? 0;
-                if (end > currentTime + 0.3) {
+                if (end > currentTime + 0.25) {
                     logger.log("jump!", currentTime, end);
                     video.currentTime = end;
                 }

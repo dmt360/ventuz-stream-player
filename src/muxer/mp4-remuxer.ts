@@ -207,8 +207,8 @@ export class MP4Remuxer {
                 this._initPTS = initPTS;
                 this._initDTS = initDTS;
             }
-        } else {
-            console.log("generateVideoIS ERROR==> ", ErrorTypes.MEDIA_ERROR);
+        } else if (videoSamples.length > 3){
+            logger.log("generateVideoIS ERROR==> ", ErrorTypes.MEDIA_ERROR);
         }
     }
 
