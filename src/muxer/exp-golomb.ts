@@ -2,7 +2,7 @@
  * Parser for exponential Golomb codes, a variable-bitwidth number encoding scheme used by h264.
  */
 
-import { logger } from './logger';
+import { logger } from "./logger";
 
 export class ExpGolomb {
     private data: Uint8Array;
@@ -26,7 +26,7 @@ export class ExpGolomb {
             workingBytes = new Uint8Array(4),
             availableBytes = Math.min(4, this.bytesAvailable);
         if (availableBytes === 0) {
-            throw new Error('no bytes available');
+            throw new Error("no bytes available");
         }
         workingBytes.set(this.data.subarray(position, position + availableBytes));
         this.word = new DataView(workingBytes.buffer).getUint32(0);
@@ -57,7 +57,7 @@ export class ExpGolomb {
         var bits = Math.min(this.bitsAvailable, size), // :uint
             valu = this.word >>> (32 - bits); // :uint
         if (size > 32) {
-            logger.error('Cannot read more than 32 bits at a time');
+            logger.error("Cannot read more than 32 bits at a time");
         }
         this.bitsAvailable -= bits;
         if (this.bitsAvailable > 0) {

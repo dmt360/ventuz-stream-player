@@ -1,16 +1,16 @@
-import { H264Demuxer } from './muxer/h264-demuxer';
-import { SlicesReader } from './muxer/h264-nal-slicesreader';
-import { MP4Remuxer } from './muxer/mp4-remuxer';
-import { logger } from './muxer/logger';
+import { H264Demuxer } from "./muxer/h264-demuxer";
+import { SlicesReader } from "./muxer/h264-nal-slicesreader";
+import { MP4Remuxer } from "./muxer/mp4-remuxer";
+import { logger } from "./muxer/logger";
 
-import './style.css';
+import "./style.css";
 
 // localize me, or something
 const statusMsgs = {
     connecting: "Connecting...",
     noStream: "Waiting for stream...",
     playing: "",
-    
+
     errNoRuntime: "Couldn't connect to VMS",
     errClosed: "Connection lost",
     errGeneric: "Error",
@@ -19,7 +19,7 @@ const statusMsgs = {
 type StatusType = keyof typeof statusMsgs;
 
 class VentuzStreamPlayer extends HTMLElement {
-    static observedAttributes = ['url'];
+    static observedAttributes = ["url"];
 
     url: string;
     private ws: WebSocket | undefined;
@@ -27,6 +27,7 @@ class VentuzStreamPlayer extends HTMLElement {
     private frameHeader: StreamOut.FrameHeader | undefined;
     private mediaSource: MediaSource | undefined;
     private vidSrcBuffer: SourceBuffer | undefined;
+    private playCountDown = 0;
 
     private video: HTMLVideoElement | undefined;
     private statusLine: HTMLDivElement | undefined;
@@ -44,20 +45,25 @@ class VentuzStreamPlayer extends HTMLElement {
 
             this.vidSrcBuffer = this.mediaSource.addSourceBuffer(`video/mp4; codecs="${this.codec}"`);
             this.vidSrcBuffer.onerror = (e) => {
-                logger.error('vid source error', e);
+                logger.error("vid source error", e);
                 this.closeStream();
+                this.setStatus("errGeneric");
             };
+
             this.vidSrcBuffer.onupdateend = () => {
-                //                logger.log('updateend')
+                if (this.playCountDown > 0) {
+                    if (!--this.playCountDown) this.video?.play();
+                }
                 this.handleQueue();
             };
 
+            this.playCountDown = 3;
             this.handleQueue();
         }
     }
 
     private openStream(hdr: StreamOut.StreamHeader) {
-        logger.log('openStream');
+        logger.log("openStream");
         this.closeStream();
 
         this.streamHeader = hdr;
@@ -70,7 +76,7 @@ class VentuzStreamPlayer extends HTMLElement {
             timeBase: hdr.videoFrameRateDen,
             timeScale: hdr.videoFrameRateNum,
             onInitSegment: (is) => {
-                logger.log('got is', is);
+                logger.log("got is", is);
 
                 if (this.mediaSource) delete this.mediaSource;
 
@@ -78,7 +84,7 @@ class VentuzStreamPlayer extends HTMLElement {
                 mediaSource.setLiveSeekableRange;
                 mediaSource.onsourceopen = () => {
                     mediaSource.duration = Infinity;
-                    logger.log('source open');
+                    logger.log("source open");
                     this.createSrcBuffer();
                 };
 
@@ -90,16 +96,18 @@ class VentuzStreamPlayer extends HTMLElement {
                     }
 
                     this.video.onerror = (e) => {
-                        logger.error('video error', e);
+                        logger.error("video error", e);
                     };
                 }
 
-                this.onMuxerData(is.data);
+                this.queue.push(is.data);
+                this.handleQueue();
             },
 
             onData: (data) => {
                 //logger.log("got data", data)
-                this.onMuxerData(data);
+                this.queue.push(data);
+                this.handleQueue();
             },
         });
 
@@ -113,7 +121,7 @@ class VentuzStreamPlayer extends HTMLElement {
                 this.createSrcBuffer();
             },
 
-            onVideo: (sn, track) => {
+            onData: (sn, track) => {
                 this.mp4Remuxer?.pushVideo(sn, track);
             },
         });
@@ -124,7 +132,7 @@ class VentuzStreamPlayer extends HTMLElement {
     }
 
     private closeStream() {
-        logger.log('closeStream');
+        logger.log("closeStream");
 
         this.queue.length = 0;
 
@@ -142,13 +150,6 @@ class VentuzStreamPlayer extends HTMLElement {
         delete this.streamHeader;
     }
 
-    private onMuxerData(data: Uint8Array) {
-        if (!this.mediaSource) return;
-
-        this.queue.push(data);
-        this.handleQueue();
-    }
-
     private handleQueue() {
         if (this.queue.length > 0 && this.vidSrcBuffer && !this.vidSrcBuffer.updating) {
             // Remove old frames from the buffer
@@ -160,7 +161,7 @@ class VentuzStreamPlayer extends HTMLElement {
 
                 if (currentTime - start >= 2 * bufferThreshold) {
                     if (end > currentTime + 0.3) {
-                        logger.log('jump!', currentTime, end);
+                        logger.log("jump!", currentTime, end);
                         this.video!.currentTime = end;
                     }
                     //logger.log('remove', start, currentTime - bufferThreshold);
@@ -177,25 +178,25 @@ class VentuzStreamPlayer extends HTMLElement {
 
     private handlePacket(pkg: StreamOut.StreamPacket) {
         switch (pkg.type) {
-            case 'connected':
+            case "connected":
                 // create and connect muxer
                 this.openStream(pkg.data);
-                this.setStatus('playing');
+                this.setStatus("playing");
                 break;
-            case 'disconnected':
+            case "disconnected":
                 this.closeStream();
-                this.setStatus('noStream');
+                this.setStatus("noStream");
                 break;
-            case 'error':
-                logger.error('got error from VMS', pkg.data);
-                this.setStatus('errGeneric');
+            case "error":
+                logger.error("got error from VMS", pkg.data);
+                this.setStatus("errGeneric");
                 this.closeStream();
                 break;
-            case 'frame':
+            case "frame":
                 this.frameHeader = pkg.data;
                 break;
             default:
-                throw new Error('pkg syntax');
+                throw new Error("pkg syntax");
         }
     }
 
@@ -209,33 +210,32 @@ class VentuzStreamPlayer extends HTMLElement {
     private openWS() {
         this.ws?.close();
 
-        this.setStatus('connecting');
+        this.setStatus("connecting");
         this.ws = new WebSocket(this.url);
-        this.ws.binaryType = 'arraybuffer';
+        this.ws.binaryType = "arraybuffer";
 
         this.ws.onopen = () => {
-            logger.log('WS open');
-            this.setStatus('noStream');
+            logger.log("WS open");
+            this.setStatus("noStream");
         };
 
         this.ws.onclose = () => {
-            logger.log('WS close');
-            if (this.ws)
-            {
-                this.setStatus('errClosed');
-                this.closeStream();    
+            logger.log("WS close");
+            if (this.ws) {
+                this.setStatus("errClosed");
+                this.closeStream();
             }
             delete this.ws;
         };
 
         this.ws.onerror = (ev) => {
-            logger.log('WS error', ev);
-            this.setStatus('errNoRuntime');
+            logger.log("WS error", ev);
+            this.setStatus("errNoRuntime");
             delete this.ws;
         };
 
         this.ws.onmessage = (ev) => {
-            if (typeof ev.data === 'string') {
+            if (typeof ev.data === "string") {
                 this.handlePacket(JSON.parse(ev.data) as StreamOut.StreamPacket);
                 return;
             }
@@ -262,22 +262,22 @@ class VentuzStreamPlayer extends HTMLElement {
 
     constructor() {
         super();
-        this.url = '';
+        this.url = "";
     }
 
     attributeChangedCallback(name: string, oldValue: string | null, newValue: string | null) {
         switch (name) {
-            case 'url':
-                this.url = newValue ?? '';
+            case "url":
+                this.url = newValue ?? "";
                 if (newValue !== oldValue && this.ws) this.openWS();
                 break;
         }
     }
 
     connectedCallback() {
-        logger.log('connectedCallback');
+        logger.log("connectedCallback");
 
-        const video = (this.video = document.createElement('video'));
+        const video = (this.video = document.createElement("video"));
         video.muted = true;
         video.autoplay = true;
         video.controls = false;
@@ -287,16 +287,16 @@ class VentuzStreamPlayer extends HTMLElement {
                 const end = this.vidSrcBuffer.buffered.end(0);
                 const currentTime = this.video?.currentTime ?? 0;
                 if (end > currentTime + 0.3) {
-                    logger.log('jump!', currentTime, end);
+                    logger.log("jump!", currentTime, end);
                     video.currentTime = end;
                 }
             }
         };
 
-        const status = (this.statusLine = document.createElement('div'));
-        status.className = 'vsp-statusdisplay';
+        const status = (this.statusLine = document.createElement("div"));
+        status.className = "vsp-statusdisplay";
 
-        const overlay = /*this.overlay =*/ document.createElement('div');
+        const overlay = /*this.overlay =*/ document.createElement("div");
         overlay.tabIndex = 0;
         overlay.appendChild(status);
 
@@ -315,15 +315,15 @@ class VentuzStreamPlayer extends HTMLElement {
 
         overlay.onpointerdown = (e) => {
             if (this.streamHeader) {
-                if (e.pointerType === 'mouse') {
+                if (e.pointerType === "mouse") {
                     // turns out JS and the stream device use the same order of buttons, so no mapping necessary here
-                    this.sendCommand({ type: 'mouseButtons', data: e.buttons });
+                    this.sendCommand({ type: "mouseButtons", data: e.buttons });
                     overlay.setPointerCapture(e.pointerId);
                 }
 
-                if (e.pointerType === 'touch') {
+                if (e.pointerType === "touch") {
                     this.sendCommand({
-                        type: 'touchBegin',
+                        type: "touchBegin",
                         data: {
                             ...getIntXY(e.clientX, e.clientY),
                             id: e.pointerId,
@@ -340,15 +340,15 @@ class VentuzStreamPlayer extends HTMLElement {
 
         overlay.onpointerup = (e) => {
             if (this.streamHeader) {
-                if (e.pointerType === 'mouse') {
+                if (e.pointerType === "mouse") {
                     // turns out JS and the stream device use the same order of buttons, so no mapping necessary here
-                    this.sendCommand({ type: 'mouseButtons', data: e.buttons });
+                    this.sendCommand({ type: "mouseButtons", data: e.buttons });
                     overlay.releasePointerCapture(e.pointerId);
                 }
 
-                if (e.pointerType === 'touch') {
+                if (e.pointerType === "touch") {
                     this.sendCommand({
-                        type: 'touchEnd',
+                        type: "touchEnd",
                         data: {
                             ...getIntXY(e.clientX, e.clientY),
                             id: e.pointerId,
@@ -363,16 +363,16 @@ class VentuzStreamPlayer extends HTMLElement {
 
         overlay.onpointermove = (e) => {
             if (this.streamHeader) {
-                if (e.pointerType === 'mouse') {
+                if (e.pointerType === "mouse") {
                     this.sendCommand({
-                        type: 'mouseMove',
+                        type: "mouseMove",
                         data: getIntXY(e.x, e.y),
                     });
                 }
 
-                if (e.pointerType === 'touch') {
+                if (e.pointerType === "touch") {
                     this.sendCommand({
-                        type: 'touchMove',
+                        type: "touchMove",
                         data: {
                             ...getIntXY(e.clientX, e.clientY),
                             id: e.pointerId,
@@ -391,9 +391,9 @@ class VentuzStreamPlayer extends HTMLElement {
         };
 
         overlay.onpointercancel = (e) => {
-            if (this.streamHeader && e.pointerType === 'touch') {
+            if (this.streamHeader && e.pointerType === "touch") {
                 this.sendCommand({
-                    type: 'touchCancel',
+                    type: "touchCancel",
                     data: {
                         ...getIntXY(e.clientX, e.clientY),
                         id: e.pointerId,
@@ -406,9 +406,9 @@ class VentuzStreamPlayer extends HTMLElement {
         };
 
         overlay.onpointerout = (e) => {
-            if (this.streamHeader && e.pointerType === 'touch') {
+            if (this.streamHeader && e.pointerType === "touch") {
                 this.sendCommand({
-                    type: 'touchCancel',
+                    type: "touchCancel",
                     data: {
                         ...getIntXY(e.clientX, e.clientY),
                         id: e.pointerId,
@@ -423,7 +423,7 @@ class VentuzStreamPlayer extends HTMLElement {
         overlay.onwheel = (e) => {
             if (this.streamHeader)
                 this.sendCommand({
-                    type: 'mouseWheel',
+                    type: "mouseWheel",
                     data: { x: -e.deltaX, y: -e.deltaY },
                 });
             e.stopPropagation();
@@ -448,16 +448,16 @@ class VentuzStreamPlayer extends HTMLElement {
         };
 
         overlay.onkeyup = (e) => {
-            this.sendCommand({ type: 'keyUp', data: e.keyCode });
+            this.sendCommand({ type: "keyUp", data: e.keyCode });
             e.stopPropagation();
             e.preventDefault();
         };
 
         overlay.onkeydown = (e) => {
             //logger.log(e);
-            this.sendCommand({ type: 'keyDown', data: e.keyCode });
+            this.sendCommand({ type: "keyDown", data: e.keyCode });
             this.sendCommand({
-                type: 'char',
+                type: "char",
                 data: e.keyCode >= 32 ? e.key.charCodeAt(0) : e.keyCode,
             });
             e.stopPropagation();
@@ -471,11 +471,11 @@ class VentuzStreamPlayer extends HTMLElement {
     }
 
     disconnectedCallback() {
-        logger.log('disconnected');
+        logger.log("disconnected");
         this.closeStream();
         this.ws?.close();
         delete this.ws;
     }
 }
 
-customElements.define('ventuz-stream-player', VentuzStreamPlayer);
+customElements.define("ventuz-stream-player", VentuzStreamPlayer);

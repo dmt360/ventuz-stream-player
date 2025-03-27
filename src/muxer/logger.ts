@@ -1,13 +1,13 @@
 export const logger = {
     log: (...args: any[]) => {
-        if (import.meta.env.MODE === 'development') {
-           console.log(...args)
+        if (import.meta.env.MODE === "development") {
+            console.log(...args);
         }
     },
     error: (...args: any[]) => {
-        console.error(...args)        
+        console.error(...args);
     },
     warn: (...args: any[]) => {
-        console.warn(...args)
-    }    
+        console.warn(...args);
+    },
 };

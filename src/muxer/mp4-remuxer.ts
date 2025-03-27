@@ -1,15 +1,15 @@
 /**
  * fMP4 remuxer
  */
-import * as MP4 from './mp4-generator';
-import { logger } from './logger';
+import * as MP4 from "./mp4-generator";
+import { logger } from "./logger";
 
 const ErrorTypes = {
-    MEDIA_ERROR: 'Media Error',
+    MEDIA_ERROR: "Media Error",
 };
 
 export type InitSegmentData = {
-    container: 'video/mp4';
+    container: "video/mp4";
     codec: string;
     data: Uint8Array;
     sn: number;
@@ -160,7 +160,7 @@ export class MP4Remuxer {
         track.len = 0;
         track.nbNalu = 0;
         track.dropped = 0;
-        if (outputSamples.length && navigator.userAgent.toLowerCase().indexOf('chrome') > -1) {
+        if (outputSamples.length && navigator.userAgent.toLowerCase().indexOf("chrome") > -1) {
             let flags = outputSamples[0].flags;
             flags.dependsOn = 2;
             flags.isNonSync = 0;
@@ -184,7 +184,7 @@ export class MP4Remuxer {
         if (videoTrack.sps && videoTrack.pps && videoSamples.length) {
             videoTrack.timescale = this.config.timeScale; //this.MP4_TIMESCALE;
             initseg = {
-                container: 'video/mp4',
+                container: "video/mp4",
                 codec: videoTrack.codec,
                 data: MP4.initSegment([videoTrack]),
                 sn: this.sn,
@@ -208,7 +208,7 @@ export class MP4Remuxer {
                 this._initDTS = initDTS;
             }
         } else {
-            console.log('generateVideoIS ERROR==> ', ErrorTypes.MEDIA_ERROR);
+            console.log("generateVideoIS ERROR==> ", ErrorTypes.MEDIA_ERROR);
         }
     }
 

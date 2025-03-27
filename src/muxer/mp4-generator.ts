@@ -17,7 +17,7 @@ export type VideoSample = {
 };
 
 export type Track = {
-    type: 'video';
+    type: "video";
 
     timescale: number;
     duration: number;

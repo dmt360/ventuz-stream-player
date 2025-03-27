@@ -1,15 +1,15 @@
 /**
 
 */
-import { ExpGolomb } from './exp-golomb';
-import * as MP4 from './mp4-generator';
-import { logger } from './logger';
+import { ExpGolomb } from "./exp-golomb";
+import * as MP4 from "./mp4-generator";
+import { logger } from "./logger";
 
 export type H264DemuxerConfig = {
     forceKeyFrameOnDiscontinuity: boolean;
     timeBase: number;
     onBufferReset(codec: string): void;
-    onVideo(sn: number, track: MP4.Track): void;
+    onData(sn: number, track: MP4.Track): void;
 };
 
 export class H264Demuxer {
@@ -30,7 +30,7 @@ export class H264Demuxer {
         this.sn = 0;
         this.timestamp = 0;
         this._avcTrack = {
-            type: 'video',
+            type: "video",
             id: 1,
             sequenceNumber: 0,
             samples: [],
@@ -38,14 +38,14 @@ export class H264Demuxer {
             nbNalu: 0,
             dropped: 0,
             timescale: 0,
-            codec: 'avc1',
+            codec: "avc1",
             config: [],
             duration: 0,
             width: 0,
             height: 0,
         };
         this.browserType = 0;
-        if (navigator.userAgent.toLowerCase().indexOf('firefox') !== -1) {
+        if (navigator.userAgent.toLowerCase().indexOf("firefox") !== -1) {
             this.browserType = 1;
         }
     }
@@ -59,9 +59,9 @@ export class H264Demuxer {
 
     pushData(data: Uint8Array) {
         this._parseAVCTrack(data);
-        if (this.browserType === 1 || this._avcTrack.samples.length >= 3) {
+        if (this.browserType === 1 || this._avcTrack.samples.length >= 2) {
             // Firefox
-            this.config.onVideo(this.sn, this._avcTrack);
+            this.config.onData(this.sn, this._avcTrack);
             this.sn += 1;
         }
     }
@@ -78,7 +78,7 @@ export class H264Demuxer {
             avcSample: MP4.VideoSample,
             push: boolean,
             i;
-        var debugString = '';
+        var debugString = "";
         var pushAccesUnit = () => {
             if (units2.length) {
                 if (
@@ -114,14 +114,14 @@ export class H264Demuxer {
                 case 1:
                     push = true;
                     if (debug) {
-                        debugString += 'NDR ';
+                        debugString += "NDR ";
                     }
                     break;
                 //IDR
                 case 5:
                     push = true;
                     if (debug) {
-                        debugString += 'IDR ';
+                        debugString += "IDR ";
                     }
                     key = true;
                     break;
@@ -136,7 +136,7 @@ export class H264Demuxer {
                 case 7:
                     push = false;
                     if (debug) {
-                        debugString += 'SPS ';
+                        debugString += "SPS ";
                     }
                     if (!track.sps) {
                         expGolombDecoder = new ExpGolomb(unit.data);
@@ -146,11 +146,11 @@ export class H264Demuxer {
                         track.sps = [unit.data];
                         track.duration = 0;
                         var codecarray = unit.data.subarray(1, 4);
-                        var codecstring = 'avc1.';
+                        var codecstring = "avc1.";
                         for (i = 0; i < 3; i++) {
                             var h = codecarray[i].toString(16);
                             if (h.length < 2) {
-                                h = '0' + h;
+                                h = "0" + h;
                             }
                             codecstring += h;
                         }
@@ -163,7 +163,7 @@ export class H264Demuxer {
                 case 8:
                     push = false;
                     if (debug) {
-                        debugString += 'PPS ';
+                        debugString += "PPS ";
                     }
                     if (!track.pps) {
                         track.pps = [unit.data];
@@ -173,13 +173,13 @@ export class H264Demuxer {
                 case 9:
                     push = false;
                     if (debug) {
-                        debugString += 'AUD ';
+                        debugString += "AUD ";
                     }
                     pushAccesUnit();
                     break;
                 default:
                     push = false;
-                    debugString += 'unknown NAL ' + unit.type + ' ';
+                    debugString += "unknown NAL " + unit.type + " ";
                     break;
             }
 
