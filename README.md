@@ -1,6 +1,6 @@
 # streamout-webcomponent
 
-https://github.com/VentuzTechnology/streamout-webcomponent/actions/workflows/build.yml/badge.svg
+![Build Status](https://github.com/VentuzTechnology/streamout-webcomponent/actions/workflows/build.yml/badge.svg)
 
 INTERNAL DOC SO FAR
 
