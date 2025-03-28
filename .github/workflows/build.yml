@@ -22,7 +22,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v3
         with:
-          node-version: 'lts'
+          node-version: 'lts/*'
 
       # Step 3: Install dependencies
       - name: Install dependencies
