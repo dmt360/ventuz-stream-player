@@ -4,15 +4,8 @@
 import * as MP4 from "./mp4-generator";
 import { logger } from "./logger";
 
-const ErrorTypes = {
-    MEDIA_ERROR: "Media Error",
-};
-
 export type InitSegmentData = {
-    container: "video/mp4";
-    codec: string;
     data: Uint8Array;
-    sn: number;
     metadata: {
         width: number;
         height: number;
@@ -20,9 +13,6 @@ export type InitSegmentData = {
 };
 
 export type MP4RemuxerConfig = {
-    //stretchShortVideoTrack: boolean
-    //maxBufferHole: number
-    //maxSeekHole: number
     timeBase: number;
     timeScale: number;
     onInitSegment(is: InitSegmentData): void;
@@ -30,28 +20,15 @@ export type MP4RemuxerConfig = {
 };
 
 export class MP4Remuxer {
-    constructor(config: MP4RemuxerConfig /*observer, id, */) {
-        //this.observer = observer;
-        //this.id = id;
+    constructor(config: MP4RemuxerConfig) {
         this.config = config;
     }
 
     private ISGenerated = false;
-    //private PES2MP4SCALEFACTOR = 4
-    //private PES_TIMESCALE = 90000
-    //private MP4_TIMESCALE = this.PES_TIMESCALE / this.PES2MP4SCALEFACTOR
-    private nextAvcDts = 90300;
+    private nextAvcDts = 0;
     private _initPTS: number | undefined = undefined;
     private _initDTS: number | undefined = undefined;
-    private sn = 0;
     private config: MP4RemuxerConfig;
-    //private nextAacPts = 0
-
-    get passthrough() {
-        return false;
-    }
-
-    destroy() {}
 
     insertDiscontinuity() {
         this._initPTS = this._initDTS = undefined;
@@ -61,30 +38,27 @@ export class MP4Remuxer {
         this.ISGenerated = false;
     }
 
-    pushVideo(sn: number, videoTrack: MP4.Track) {
-        this.sn = sn;
-
+    pushVideo(videoTrack: MP4.VideoTrack) {
         // generate Init Segment if needed
         if (!this.ISGenerated) {
             this.generateVideoIS(videoTrack);
         }
         if (this.ISGenerated) {
             if (videoTrack.samples.length) {
-                this.remuxVideo_2(videoTrack);
+                this.remuxVideo(videoTrack);
             }
         }
     }
 
-    remuxVideo_2(track: MP4.Track) {
-        var offset = 8,
-            mdat,
-            moof,
-            inputSamples = track.samples,
+    remuxVideo(track: MP4.VideoTrack) {
+        const inputSamples = track.samples,
             outputSamples: MP4.VideoSample[] = [];
 
-        /* concatenate the video data and construct the mdat in place
-      (need 8 more bytes to fill length and mpdat type) */
-        mdat = new Uint8Array(track.len + 4 * track.nbNalu + 8);
+        let offset = 8;
+
+        // concatenate the video data and construct the mdat in place
+        // (need 8 more bytes to fill length and mdat type)
+        const mdat = new Uint8Array(track.len + 4 * track.nbNalu + 8);
         let view = new DataView(mdat.buffer);
         view.setUint32(0, mdat.byteLength);
         mdat.set(MP4.types.mdat, 4);
@@ -96,8 +70,8 @@ export class MP4Remuxer {
             let avcSample = inputSamples[i],
                 mp4SampleLength = 0;
             // convert NALU bitstream to MP4 format (prepend NALU with size field)
-            while (avcSample.units.units.length) {
-                let unit = avcSample.units.units.shift()!;
+            while (avcSample.units.length) {
+                let unit = avcSample.units.shift()!;
                 view.setUint32(offset, unit.data.byteLength);
                 offset += 4;
                 mdat.set(unit.data, offset);
@@ -113,13 +87,12 @@ export class MP4Remuxer {
                 ptsnorm = this._PTSNormalize(pts, lastDTS);
                 dtsnorm = this._PTSNormalize(dts, lastDTS);
             } else {
-                var nextAvcDts = this.nextAvcDts,
-                    delta;
+                const nextAvcDts = this.nextAvcDts;
                 ptsnorm = this._PTSNormalize(pts, nextAvcDts);
                 dtsnorm = this._PTSNormalize(dts, nextAvcDts);
                 if (nextAvcDts) {
-                    delta = Math.round(dtsnorm - nextAvcDts);
-                    if (/*contiguous ||*/ Math.abs(delta) < 600) {
+                    const delta = Math.round(dtsnorm - nextAvcDts);
+                    if (Math.abs(delta) < 600) {
                         if (delta) {
                             if (delta > 1) {
                                 logger.log(`AVC:${delta} ms hole between fragments detected,filling it`);
@@ -145,49 +118,44 @@ export class MP4Remuxer {
                 pts,
                 dts,
                 key: avcSample.key,
-                units: { units: [] },
+                units: [],
             });
             lastDTS = dtsnorm;
         }
 
-        var lastSampleDuration = 0;
+        let lastSampleDuration = 0;
         if (outputSamples.length >= 2) {
             lastSampleDuration = outputSamples[outputSamples.length - 2].duration;
             outputSamples[0].duration = lastSampleDuration;
         }
         this.nextAvcDts = dtsnorm + lastSampleDuration;
-        //let dropped = track.dropped
+
         track.len = 0;
         track.nbNalu = 0;
-        track.dropped = 0;
         if (outputSamples.length && navigator.userAgent.toLowerCase().indexOf("chrome") > -1) {
             let flags = outputSamples[0].flags;
             flags.dependsOn = 2;
             flags.isNonSync = 0;
         }
         track.samples = outputSamples;
-        moof = MP4.moof(track.sequenceNumber++, dtsnorm, track);
+        const moof = MP4.moof(track.sequenceNumber++, dtsnorm, track);
         track.samples = [];
 
         this.config.onData(moof);
         this.config.onData(mdat);
     }
 
-    generateVideoIS(videoTrack: MP4.Track) {
-        var videoSamples = videoTrack.samples,
-            computePTSDTS = this._initPTS === undefined,
-            initPTS = Infinity,
-            initDTS = Infinity;
-
-        var initseg: InitSegmentData | null = null;
+    private generateVideoIS(videoTrack: MP4.VideoTrack) {
+        const videoSamples = videoTrack.samples,
+            computePTSDTS = this._initPTS === undefined;
+        let initPTS = Infinity,
+            initDTS = Infinity,
+            initseg: InitSegmentData | null = null;
 
         if (videoTrack.sps && videoTrack.pps && videoSamples.length) {
             videoTrack.timescale = this.config.timeScale; //this.MP4_TIMESCALE;
             initseg = {
-                container: "video/mp4",
-                codec: videoTrack.codec,
                 data: MP4.initSegment([videoTrack]),
-                sn: this.sn,
                 metadata: {
                     width: videoTrack.width,
                     height: videoTrack.height,
@@ -207,16 +175,16 @@ export class MP4Remuxer {
                 this._initPTS = initPTS;
                 this._initDTS = initDTS;
             }
-        } else if (videoSamples.length > 3){
-            logger.log("generateVideoIS ERROR==> ", ErrorTypes.MEDIA_ERROR);
+        } else if (videoSamples.length > 3) {
+            logger.error("didn't get SPS and PPS");
         }
     }
 
-    _PTSNormalize(value: number, reference: number) {
-        var offset;
+    private _PTSNormalize(value: number, reference: number) {
         if (reference === undefined) {
             return value;
         }
+        let offset;
         if (reference < value) {
             // - 2^33
             offset = -8589934592;

@@ -1,5 +1,4 @@
 import { H264Demuxer } from "./muxer/h264-demuxer";
-import { SlicesReader } from "./muxer/h264-nal-slicesreader";
 import { MP4Remuxer } from "./muxer/mp4-remuxer";
 import { logger } from "./muxer/logger";
 
@@ -33,7 +32,6 @@ class VentuzStreamPlayer extends HTMLElement {
     private video: HTMLVideoElement | undefined;
     private statusLine: HTMLDivElement | undefined;
 
-    private slicesReader: SlicesReader | undefined;
     private h264Demuxer: H264Demuxer | undefined;
     private mp4Remuxer: MP4Remuxer | undefined;
     private queue: Uint8Array[] = [];
@@ -114,22 +112,18 @@ class VentuzStreamPlayer extends HTMLElement {
         });
 
         this.h264Demuxer = new H264Demuxer({
+            width: hdr.videoWidth,
+            height: hdr.videoHeight,
             timeBase: hdr.videoFrameRateDen,
-
-            forceKeyFrameOnDiscontinuity: false,
 
             onBufferReset: (codec) => {
                 this.codec = codec;
                 this.createSrcBuffer();
             },
 
-            onData: (sn, track) => {
-                this.mp4Remuxer?.pushVideo(sn, track);
+            onData: (track) => {
+                this.mp4Remuxer?.pushVideo(track);
             },
-        });
-
-        this.slicesReader = new SlicesReader({
-            onNal: (data) => this.h264Demuxer?.pushData(data),
         });
     }
 
@@ -146,7 +140,6 @@ class VentuzStreamPlayer extends HTMLElement {
 
         delete this.mp4Remuxer;
         delete this.h264Demuxer;
-        delete this.slicesReader;
 
         delete this.frameHeader;
         delete this.streamHeader;
@@ -203,8 +196,8 @@ class VentuzStreamPlayer extends HTMLElement {
     }
 
     private handleVideoFrame(data: Uint8Array) {
-        if (this.slicesReader && this.streamHeader && this.frameHeader) {
-            this.slicesReader!.read(data);
+        if (this.h264Demuxer && this.streamHeader && this.frameHeader) {
+            this.h264Demuxer.pushData(data);
 
             // make sure we get a keyframe at least every 4 seconds so we can throw away old frames
             if (this.frameHeader.flags === "keyFrame") {

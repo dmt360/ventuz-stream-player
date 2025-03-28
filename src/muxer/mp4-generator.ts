@@ -12,26 +12,21 @@ export type VideoSample = {
     cts: number;
     pts: number;
     dts: number;
-    units: { units: { data: Uint8Array }[] };
+    units: { type: number, data: Uint8Array }[];
     key: boolean;
 };
 
-export type Track = {
-    type: "video";
-
+export type VideoTrack = {
     timescale: number;
     duration: number;
 
     len: number;
-    config: number[];
     id: number;
     width: number;
     height: number;
     sequenceNumber: number;
-    codec: string;
 
     nbNalu: number;
-    dropped: number;
 
     samples: VideoSample[];
 
@@ -76,8 +71,7 @@ export const types: { [k: string]: number[] } = {
     smhd: [],
 };
 
-const HDLR_TYPES = {
-    video: new Uint8Array([
+    const HDLR_video = new Uint8Array([
         0x00, // version 0
         0x00,
         0x00,
@@ -115,8 +109,7 @@ const HDLR_TYPES = {
         0x65,
         0x72,
         0x00, // name: 'VideoHandler'
-    ]),
-};
+    ]);
 
 const STTS = new Uint8Array([
     0x00, // version
@@ -234,13 +227,7 @@ export function init() {
 }
 
 export function box(type: number[], args: Uint8Array[] = []) {
-    let size = 8,
-        i = args.length;
-
-    // calculate the total size we need to allocate
-    while (i--) {
-        size += args[i].byteLength;
-    }
+    let size = args.reduce((acc, arg) => acc + arg.byteLength, 8); // 8 bytes for the box header
     const result = new Uint8Array(size);
     result[0] = (size >> 24) & 0xff;
     result[1] = (size >> 16) & 0xff;
@@ -248,7 +235,7 @@ export function box(type: number[], args: Uint8Array[] = []) {
     result[3] = size & 0xff;
     result.set(type, 4);
     // copy the payload into the result
-    for (i = 0, size = 8; i < args.length; i++) {
+    for (let i = 0, size = 8; i < args.length; i++) {
         // copy payload[i] array @ offset size
         result.set(args[i], size);
         size += args[i].byteLength;
@@ -256,12 +243,11 @@ export function box(type: number[], args: Uint8Array[] = []) {
     return result;
 }
 
-export function hdlr(type: keyof typeof HDLR_TYPES) {
-    return box(types.hdlr, [HDLR_TYPES[type]]);
+export function hdlr() {
+    return box(types.hdlr, [HDLR_video]);
 }
 
 export function mdat(data: Uint8Array) {
-    //  console.log( "mdat==> ",data.length );
     return box(types.mdat, [data]);
 }
 
@@ -297,8 +283,8 @@ export function mdhd(timescale: number, duration: number) {
     ]);
 }
 
-export function mdia(track: Track) {
-    return box(types.mdia, [mdhd(track.timescale, track.duration), hdlr(track.type), minf(track)]);
+export function mdia(track: VideoTrack) {
+    return box(types.mdia, [mdhd(track.timescale, track.duration), hdlr(), minf(track)]);
 }
 
 export function mfhd(sequenceNumber: number) {
@@ -316,36 +302,20 @@ export function mfhd(sequenceNumber: number) {
     ]);
 }
 
-export function minf(track: Track) {
+export function minf(track: VideoTrack) {
     return box(types.minf, [box(types.vmhd, [VMHD]), DINF, stbl(track)]);
 }
 
-export function moof(sn: number, baseMediaDecodeTime: number, track: Track) {
+export function moof(sn: number, baseMediaDecodeTime: number, track: VideoTrack) {
     return box(types.moof, [mfhd(sn), traf(track, baseMediaDecodeTime)]);
 }
 
-/**
- * @param tracks... (optional) {array} the tracks associated with this movie
- */
-export function moov(tracks: Track[]) {
-    let i = tracks.length;
-    const boxes: Uint8Array[] = [];
-
-    while (i--) {
-        boxes[i] = trak(tracks[i]);
-    }
-
-    return box(types.moov, [mvhd(tracks[0].timescale, tracks[0].duration), ...boxes, mvex(tracks)]);
+export function moov(tracks: VideoTrack[]) {
+    return box(types.moov, [mvhd(tracks[0].timescale, tracks[0].duration), ...tracks.map(trak), mvex(tracks)]);
 }
 
-export function mvex(tracks: Track[]) {
-    let i = tracks.length;
-    const boxes: Uint8Array[] = [];
-
-    while (i--) {
-        boxes[i] = trex(tracks[i]);
-    }
-    return box(types.mvex, boxes);
+export function mvex(tracks: VideoTrack[]) {
+    return box(types.mvex, tracks.map(trex));
 }
 
 export function mvhd(timescale: number, duration: number) {
@@ -455,8 +425,8 @@ export function mvhd(timescale: number, duration: number) {
     return box(types.mvhd, [bytes]);
 }
 
-export function sdtp(track: Track) {
-    const samples = track.samples || [],
+export function sdtp(track: VideoTrack) {
+    const samples = track.samples,
         bytes = new Uint8Array(4 + samples.length);
 
     // leave the full box header (4 bytes) all zero
@@ -469,7 +439,7 @@ export function sdtp(track: Track) {
     return box(types.sdtp, [bytes]);
 }
 
-export function stbl(track: Track) {
+export function stbl(track: VideoTrack) {
     return box(types.stbl, [
         stsd(track),
         box(types.stts, [STTS]),
@@ -479,7 +449,7 @@ export function stbl(track: Track) {
     ]);
 }
 
-export function avc1(track: Track) {
+export function avc1(track: VideoTrack) {
     let sps: number[] = [],
         pps: number[] = [];
 
@@ -507,12 +477,10 @@ export function avc1(track: Track) {
                     sps[5], // level
                     0xfc | 3, // lengthSizeMinusOne, hard-coded to 4 bytes
                     0xe0 | track.sps!.length, // 3bit reserved (111) + numOfSequenceParameterSets
+                    ...sps,
+                    track.pps!.length,
+                    ...pps
                 ]
-                    .concat(sps)
-                    .concat([
-                        track.pps!.length, // numOfPictureParameterSets
-                    ])
-                    .concat(pps)
             ),
         ]), // "PPS"
         width = track.width,
@@ -622,11 +590,11 @@ export function avc1(track: Track) {
     );
 }
 
-export function stsd(track: Track) {
+export function stsd(track: VideoTrack) {
     return box(types.stsd, [STSD, avc1(track)]);
 }
 
-export function tkhd(track: Track) {
+export function tkhd(track: VideoTrack) {
     const id = track.id,
         duration = track.duration * track.timescale,
         width = track.width,
@@ -724,7 +692,7 @@ export function tkhd(track: Track) {
     ]);
 }
 
-export function traf(track: Track, baseMediaDecodeTime: number) {
+export function traf(track: VideoTrack, baseMediaDecodeTime: number) {
     const sampleDependencyTable = sdtp(track),
         id = track.id;
 
@@ -774,12 +742,12 @@ export function traf(track: Track, baseMediaDecodeTime: number) {
  * @param track {object} a track definition
  * @return {Uint8Array} the track box
  */
-export function trak(track: Track) {
+export function trak(track: VideoTrack) {
     track.duration = track.duration || 0xffffffff;
     return box(types.trak, [tkhd(track), mdia(track)]);
 }
 
-export function trex(track: Track) {
+export function trex(track: VideoTrack) {
     const id = track.id;
     return box(types.trex, [
         new Uint8Array([
@@ -811,7 +779,7 @@ export function trex(track: Track) {
     ]);
 }
 
-export function trun(track: Track, offset: number) {
+export function trun(track: VideoTrack, offset: number) {
     const samples = track.samples || [],
         len = samples.length,
         arraylen = 12 + 16 * len,
@@ -869,7 +837,7 @@ export function trun(track: Track, offset: number) {
     return box(types.trun, [array]);
 }
 
-export function initSegment(tracks: Track[]) {
+export function initSegment(tracks: VideoTrack[]) {
     if (!types[0]) {
         init();
     }
