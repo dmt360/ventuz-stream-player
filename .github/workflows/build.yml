@@ -1,4 +1,4 @@
-name: Build Project
+name: Build
 
 # Trigger the workflow on every push to any branch
 on:
@@ -22,7 +22,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v3
         with:
-          node-version: 18 # Use the Node.js version your project requires
+          node-version: 'lts'
 
       # Step 3: Install dependencies
       - name: Install dependencies
@@ -31,3 +31,10 @@ jobs:
       # Step 4: Build the project
       - name: Build the project
         run: npm run build
+
+        # Step 5: Upload build artifacts
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: build-artifacts
+          path: dist/
