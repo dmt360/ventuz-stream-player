@@ -2,6 +2,11 @@
  * Generate MP4 Box
  */
 
+export type Unit = {
+    type: number,
+    data: Uint8Array,
+}
+
 export type VideoSample = {
     flags: {
         dependsOn: number;
@@ -12,7 +17,7 @@ export type VideoSample = {
     cts: number;
     pts: number;
     dts: number;
-    units: { type: number, data: Uint8Array }[];
+    units: Unit[];
     key: boolean;
 };
 

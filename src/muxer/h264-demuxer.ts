@@ -16,10 +16,10 @@ export class H264Demuxer {
     private config: H264DemuxerConfig;
     private timestamp: number;
     private _avcTrack: MP4.VideoTrack;
-    private browserType: number;
+    private firefox: boolean;
 
     constructor(config: H264DemuxerConfig) {
-        this.config = config;       
+        this.config = config;
         this.timestamp = 0;
         this._avcTrack = {
             id: 1,
@@ -32,36 +32,19 @@ export class H264Demuxer {
             width: 0,
             height: 0,
         };
-        this.browserType = 0;
-        if (navigator.userAgent.toLowerCase().indexOf("firefox") !== -1) {
-            this.browserType = 1;
-        }
+        this.firefox = navigator.userAgent.toLowerCase().indexOf("firefox") !== -1;
     }
 
-    destroy() {}
-
-    getTimestampM() {
-        const ts = this.timestamp;
-        this.timestamp += this.config.timeBase;
-        return ts;
-    }
-
-    pushData(data: Uint8Array) {
-        this._parseAVCTrack(data);
-        if (this.browserType === 1 || this._avcTrack.samples.length >= 2) {
-            this.config.onData(this._avcTrack);
-        }
-    }
-
-    _parseAVCTrack(array: Uint8Array) {
+    pushData(array: Uint8Array) {
         const track = this._avcTrack,
             samples = track.samples,
-            units = this._parseAVCNALu(array),
+            units = this.parseAVCNALu(array),
             debug = false;
         let units2: typeof units = [],
             key = false,
+            frame = false,
             debugString = "";
-                    
+
         units.forEach((unit) => {
             let push = false;
             switch (unit.type) {
@@ -71,6 +54,7 @@ export class H264Demuxer {
                     if (debug) {
                         debugString += "NDR ";
                     }
+                    frame = true;
                     break;
                 //IDR
                 case 5:
@@ -79,6 +63,7 @@ export class H264Demuxer {
                         debugString += "IDR ";
                     }
                     key = true;
+                    frame = true;
                     break;
                 //SPS
                 case 7:
@@ -89,8 +74,10 @@ export class H264Demuxer {
                         track.width = this.config.width;
                         track.height = this.config.height;
                         track.sps = [unit.data];
-                        track.duration = 0;                        
-                        const codecstring = unit.data.subarray(1, 4).reduce((acc, val) => acc += val.toString(16).padStart(2, "0"), "avc1."); 
+                        track.duration = 0;
+                        const codecstring = unit.data
+                            .subarray(1, 4)
+                            .reduce((acc, val) => (acc += val.toString(16).padStart(2, "0")), "avc1.");
                         this.config.onBufferReset(codecstring);
                         push = true;
                     }
@@ -120,8 +107,8 @@ export class H264Demuxer {
             logger.log(debugString);
         }
 
-        if (units2.length) {           
-            const tss = this.getTimestampM();
+        if (units2.length) {
+            const tss = this.timestamp;
             samples.push({
                 units: [...units2],
                 pts: tss,
@@ -133,18 +120,23 @@ export class H264Demuxer {
                 size: length,
             });
             track.len += length;
-            track.nbNalu += units2.length;                 
+            track.nbNalu += units2.length;
+            if (frame) this.timestamp += this.config.timeBase;
+        }
+        
+        if (this.firefox || track.samples.length >= 2) {
+            this.config.onData(this._avcTrack);
         }
     }
 
-    _parseAVCNALu(array: Uint8Array) {
+    private parseAVCNALu(array: Uint8Array) {
         const len = array.byteLength,
-            units = [];
+            units: MP4.Unit[] = [];
         let state = 0,
-        lastUnitType = 0,
-        lastUnitStart = 0;
+            lastUnitType = 0,
+            lastUnitStart = 0;
 
-        for (let i = 0; i < len;) {
+        for (let i = 0; i < len; ) {
             const value = array[i++];
             // finding 3 or 4-byte start codes (00 00 01 OR 00 00 00 01)
             switch (state) {
@@ -170,7 +162,7 @@ export class H264Demuxer {
                                 data: array.subarray(lastUnitStart, i - state - 1),
                                 type: lastUnitType,
                             });
-                        } 
+                        }
                         lastUnitStart = i;
                         lastUnitType = array[i] & 0x1f;
                         state = 0;
@@ -187,10 +179,9 @@ export class H264Demuxer {
             units.push({
                 data: array.subarray(lastUnitStart, len),
                 type: lastUnitType,
-                state: state,
             });
         }
 
         return units;
-    }  
+    }
 }
