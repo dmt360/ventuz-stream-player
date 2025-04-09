@@ -11,6 +11,9 @@ Development:
 - "npm run build" to build the component in /dist
 
 Usage:
-- NPM based projects: add a local dependency from your project to this one
+- NPM based projects, eg. Ventuz:
+  - run "npm pack" to create a tarball
+  - put that tarball somewhere and add a dependency in your package.json like this:
+    `"ventuz-stream-player": "somefolder/ventuz-stream-player-<version>.tgz"`
 - Others: Just include dist/ventuz-stream-player-min.js in your project
 - For the rest, check out dist/index.html, it's not really hard :)
