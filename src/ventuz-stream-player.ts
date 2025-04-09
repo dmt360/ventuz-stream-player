@@ -201,9 +201,11 @@ class VentuzStreamPlayer extends HTMLElement {
 
             // make sure we get a keyframe at least every 4 seconds so we can throw away old frames
             if (this.frameHeader.flags === "keyFrame") {
-                this.lastKeyFrameIndex = this.frameHeader.frameIndex
-            }
-            else if (this.frameHeader.frameIndex - this.lastKeyFrameIndex > (4 * this.streamHeader.videoFrameRateNum / this.streamHeader.videoFrameRateDen)) { 
+                this.lastKeyFrameIndex = this.frameHeader.frameIndex;
+            } else if (
+                this.frameHeader.frameIndex - this.lastKeyFrameIndex >
+                (4 * this.streamHeader.videoFrameRateNum) / this.streamHeader.videoFrameRateDen
+            ) {
                 logger.log("requesting IDR frame");
                 this.lastKeyFrameIndex = this.frameHeader.frameIndex;
                 this.sendCommand({ type: "requestIDRFrame" });

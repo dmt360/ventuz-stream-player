@@ -121,9 +121,10 @@ export class H264Demuxer {
             });
             track.len += length;
             track.nbNalu += units2.length;
-            if (frame) this.timestamp += this.config.timeBase;
+            if (frame) {
+                this.timestamp += this.config.timeBase;
+            }
         }
-        
         if (this.firefox || track.samples.length >= 2) {
             this.config.onData(this._avcTrack);
         }

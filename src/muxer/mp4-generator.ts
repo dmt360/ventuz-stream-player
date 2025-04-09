@@ -3,9 +3,9 @@
  */
 
 export type Unit = {
-    type: number,
-    data: Uint8Array,
-}
+    type: number;
+    data: Uint8Array;
+};
 
 export type VideoSample = {
     flags: {
@@ -76,45 +76,45 @@ export const types: { [k: string]: number[] } = {
     smhd: [],
 };
 
-    const HDLR_video = new Uint8Array([
-        0x00, // version 0
-        0x00,
-        0x00,
-        0x00, // flags
-        0x00,
-        0x00,
-        0x00,
-        0x00, // pre_defined
-        0x76,
-        0x69,
-        0x64,
-        0x65, // handler_type: 'vide'
-        0x00,
-        0x00,
-        0x00,
-        0x00, // reserved
-        0x00,
-        0x00,
-        0x00,
-        0x00, // reserved
-        0x00,
-        0x00,
-        0x00,
-        0x00, // reserved
-        0x56,
-        0x69,
-        0x64,
-        0x65,
-        0x6f,
-        0x48,
-        0x61,
-        0x6e,
-        0x64,
-        0x6c,
-        0x65,
-        0x72,
-        0x00, // name: 'VideoHandler'
-    ]);
+const HDLR_video = new Uint8Array([
+    0x00, // version 0
+    0x00,
+    0x00,
+    0x00, // flags
+    0x00,
+    0x00,
+    0x00,
+    0x00, // pre_defined
+    0x76,
+    0x69,
+    0x64,
+    0x65, // handler_type: 'vide'
+    0x00,
+    0x00,
+    0x00,
+    0x00, // reserved
+    0x00,
+    0x00,
+    0x00,
+    0x00, // reserved
+    0x00,
+    0x00,
+    0x00,
+    0x00, // reserved
+    0x56,
+    0x69,
+    0x64,
+    0x65,
+    0x6f,
+    0x48,
+    0x61,
+    0x6e,
+    0x64,
+    0x6c,
+    0x65,
+    0x72,
+    0x00, // name: 'VideoHandler'
+]);
 
 const STTS = new Uint8Array([
     0x00, // version
@@ -474,19 +474,17 @@ export function avc1(track: VideoTrack) {
     }
 
     const avcc = box(types.avcC, [
-            new Uint8Array(
-                [
-                    0x01, // version
-                    sps[3], // profile
-                    sps[4], // profile compat
-                    sps[5], // level
-                    0xfc | 3, // lengthSizeMinusOne, hard-coded to 4 bytes
-                    0xe0 | track.sps!.length, // 3bit reserved (111) + numOfSequenceParameterSets
-                    ...sps,
-                    track.pps!.length,
-                    ...pps
-                ]
-            ),
+            new Uint8Array([
+                0x01, // version
+                sps[3], // profile
+                sps[4], // profile compat
+                sps[5], // level
+                0xfc | 3, // lengthSizeMinusOne, hard-coded to 4 bytes
+                0xe0 | track.sps!.length, // 3bit reserved (111) + numOfSequenceParameterSets
+                ...sps,
+                track.pps!.length,
+                ...pps,
+            ]),
         ]), // "PPS"
         width = track.width,
         height = track.height;
