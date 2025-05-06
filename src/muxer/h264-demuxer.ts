@@ -8,6 +8,7 @@ export type H264DemuxerConfig = {
     width: number;
     height: number;
     timeBase: number;
+    fragSize: number;
     onBufferReset(codec: string): void;
     onData(track: MP4.VideoTrack): void;
 };
@@ -16,7 +17,7 @@ export class H264Demuxer {
     private config: H264DemuxerConfig;
     private timestamp: number;
     private _avcTrack: MP4.VideoTrack;
-    private firefox: boolean;
+    //private firefox: boolean;
 
     constructor(config: H264DemuxerConfig) {
         this.config = config;
@@ -32,7 +33,7 @@ export class H264Demuxer {
             width: 0,
             height: 0,
         };
-        this.firefox = navigator.userAgent.toLowerCase().indexOf("firefox") !== -1;
+        //this.firefox = navigator.userAgent.toLowerCase().indexOf("firefox") !== -1;
     }
 
     pushData(array: Uint8Array) {
@@ -126,8 +127,9 @@ export class H264Demuxer {
                 this.timestamp += this.config.timeBase;
             }
         }
-        if (this.firefox || track.samples.length >= 2) {
-            this.config.onData(this._avcTrack);
+        //if (this.firefox || track.samples.length >= 2) {
+        if (track.samples.length >= this.config.fragSize) {
+                this.config.onData(this._avcTrack);
         }
     }
 

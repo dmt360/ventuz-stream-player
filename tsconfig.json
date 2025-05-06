@@ -5,6 +5,7 @@
     "module":"ES2022",
     "skipLibCheck": true,
     "noImplicitAny": true,
+    "forceConsistentCasingInFileNames": true,
 
     /* Bundler mode */
     "moduleResolution": "bundler",

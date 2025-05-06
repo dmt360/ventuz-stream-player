@@ -13,50 +13,55 @@ const statusMsgs = {
     errNoRuntime: "Couldn't connect to VMS",
     errClosed: "Connection lost",
     errGeneric: "Error",
+    errBadFormat: "Can't play this video format",
 };
 
 type StatusType = keyof typeof statusMsgs;
 
 class VentuzStreamPlayer extends HTMLElement {
-    static observedAttributes = ["url"];
+   
+    // parameters
+    url = "";
+    extraLatency = 0;
 
-    url: string;
-    private ws: WebSocket | undefined;
-    private streamHeader: StreamOut.StreamHeader | undefined;
-    private frameHeader: StreamOut.FrameHeader | undefined;
-    private mediaSource: MediaSource | undefined;
-    private vidSrcBuffer: SourceBuffer | undefined;
-    private playCountDown = 0;
+    // state
+    private ws?: WebSocket;
+    private streamHeader?: StreamOut.StreamHeader;
+    private frameHeader?: StreamOut.FrameHeader;
+    private mediaSource?: MediaSource;
+    private vidSrcBuffer?: SourceBuffer;
     private lastKeyFrameIndex = 0;
 
-    private video: HTMLVideoElement | undefined;
-    private statusLine: HTMLDivElement | undefined;
+    private video?: HTMLVideoElement;
+    private statusLine?: HTMLDivElement;
 
-    private h264Demuxer: H264Demuxer | undefined;
-    private mp4Remuxer: MP4Remuxer | undefined;
+    private h264Demuxer?: H264Demuxer;
+    private mp4Remuxer?: MP4Remuxer;
     private queue: Uint8Array[] = [];
 
-    private codec: string | undefined;
+    private codec?: string;
+
+    private lastLatency = 0;
 
     private createSrcBuffer() {
         if (this.mediaSource) {
             if (this.vidSrcBuffer) this.mediaSource.removeSourceBuffer(this.vidSrcBuffer);
 
-            this.vidSrcBuffer = this.mediaSource.addSourceBuffer(`video/mp4; codecs="${this.codec}"`);
+            try {
+                this.vidSrcBuffer = this.mediaSource.addSourceBuffer(`video/mp4; codecs="${this.codec}"`);
+            } catch {
+                logger.error("error creating source buffer", this.codec);
+                this.setStatus("errBadFormat");
+                return;
+            }
+            this.vidSrcBuffer.mode = "sequence";
             this.vidSrcBuffer.onerror = (e) => {
                 logger.error("vid source error", e);
                 this.closeStream();
                 this.setStatus("errGeneric");
             };
 
-            this.vidSrcBuffer.onupdateend = () => {
-                if (this.playCountDown > 0) {
-                    if (!--this.playCountDown) this.video?.play();
-                }
-                this.handleQueue();
-            };
-
-            this.playCountDown = 3;
+            this.vidSrcBuffer.onupdateend = () => this.handleQueue();
             this.handleQueue();
         }
     }
@@ -70,6 +75,17 @@ class VentuzStreamPlayer extends HTMLElement {
         while (hdr.videoFrameRateDen < 1000) {
             hdr.videoFrameRateNum *= 10;
             hdr.videoFrameRateDen *= 10;
+        }
+
+        if (this.streamHeader.videoCodecFourCC !== 1748121140) {
+            logger.error("Unsupported codec", this.streamHeader.videoCodecFourCC);
+            this.setStatus("errBadFormat");
+            return false;
+        }
+
+        if (this.video) {
+            this.video.width = hdr.videoWidth;
+            this.video.height = hdr.videoHeight;
         }
 
         this.mp4Remuxer = new MP4Remuxer({
@@ -92,7 +108,7 @@ class VentuzStreamPlayer extends HTMLElement {
                     try {
                         this.video.src = URL.createObjectURL(mediaSource);
                     } catch (error: any) {
-                        console.log(error);
+                        logger.log(error);
                     }
 
                     this.video.onerror = (e) => {
@@ -105,7 +121,6 @@ class VentuzStreamPlayer extends HTMLElement {
             },
 
             onData: (data) => {
-                //logger.log("got data", data)
                 this.queue.push(data);
                 this.handleQueue();
             },
@@ -115,6 +130,7 @@ class VentuzStreamPlayer extends HTMLElement {
             width: hdr.videoWidth,
             height: hdr.videoHeight,
             timeBase: hdr.videoFrameRateDen,
+            fragSize: Math.max(1, Math.ceil( this.extraLatency * hdr.videoFrameRateNum / hdr.videoFrameRateDen )),
 
             onBufferReset: (codec) => {
                 this.codec = codec;
@@ -125,6 +141,8 @@ class VentuzStreamPlayer extends HTMLElement {
                 this.mp4Remuxer?.pushVideo(track);
             },
         });
+
+        return true;
     }
 
     private closeStream() {
@@ -152,14 +170,18 @@ class VentuzStreamPlayer extends HTMLElement {
                 const start = this.vidSrcBuffer.buffered.start(0);
                 const end = this.vidSrcBuffer.buffered.end(0);
                 const currentTime = this.video?.currentTime ?? 0;
-                const bufferThreshold = 5;
+                const bufferThreshold = 5 + this.extraLatency;
 
                 if (currentTime - start >= 2 * bufferThreshold) {
-                    if (end > currentTime + 0.25) {
-                        logger.log("jump!", currentTime, end);
+
+                    // check if player has gotten behind and jump forwards
+                    const frametime = this.streamHeader!.videoFrameRateDen / this.streamHeader!.videoFrameRateNum;
+                    const max = end - this.lastLatency - 2 * frametime;
+                    if (max > currentTime) {
+                        logger.log("jump!", end - currentTime);
                         this.video!.currentTime = end;
                     }
-                    //logger.log('remove', start, currentTime - bufferThreshold);
+
                     this.vidSrcBuffer.remove(start, currentTime - bufferThreshold);
                     return;
                 }
@@ -175,8 +197,8 @@ class VentuzStreamPlayer extends HTMLElement {
         switch (pkg.type) {
             case "connected":
                 // create and connect muxer
-                this.openStream(pkg.data);
-                this.setStatus("playing");
+                if (this.openStream(pkg.data))
+                    this.setStatus("playing");
                 break;
             case "disconnected":
                 this.closeStream();
@@ -191,7 +213,8 @@ class VentuzStreamPlayer extends HTMLElement {
                 this.frameHeader = pkg.data;
                 break;
             default:
-                throw new Error("pkg syntax");
+                logger.error("unknown packet type", (pkg as any).type);
+                break;
         }
     }
 
@@ -270,13 +293,18 @@ class VentuzStreamPlayer extends HTMLElement {
 
     constructor() {
         super();
-        this.url = "";
     }
+
+    static observedAttributes = ["url", "latency"];
 
     attributeChangedCallback(name: string, oldValue: string | null, newValue: string | null) {
         switch (name) {
             case "url":
                 this.url = newValue ?? "";
+                if (newValue !== oldValue && this.ws) this.openWS();
+                break;
+            case "latency":
+                this.extraLatency = Math.max(0, Math.min(60, parseFloat(newValue ?? "0") || 0));
                 if (newValue !== oldValue && this.ws) this.openWS();
                 break;
         }
@@ -287,14 +315,25 @@ class VentuzStreamPlayer extends HTMLElement {
 
         const video = (this.video = document.createElement("video"));
         video.muted = true;
-        video.autoplay = true;
         video.controls = false;
 
-        video.onplaying = (_) => {
+        video.oncanplay = (_) => {
             if (this.vidSrcBuffer) {
-                const end = this.vidSrcBuffer.buffered.end(0);
+                // measure latency (buffered end - current play time)
+                let end = this.vidSrcBuffer.buffered.end(0);
+                this.lastLatency = end - video.currentTime;
+                logger.log("oncanplay", this.lastLatency);
+            }
+            video.play();
+        };
+
+        video.onplay = (_) => {
+            if (this.vidSrcBuffer && this.streamHeader) {
                 const currentTime = this.video?.currentTime ?? 0;
-                if (end > currentTime + 0.25) {
+                let end = this.vidSrcBuffer.buffered.end(0);
+                logger.log("onplay", currentTime, end);
+                //end -= 1 * this.streamHeader.videoFrameRateDen / this.streamHeader.videoFrameRateNum;
+                if (end > currentTime) {
                     logger.log("jump!", currentTime, end);
                     video.currentTime = end;
                 }
@@ -314,7 +353,21 @@ class VentuzStreamPlayer extends HTMLElement {
         }
 
         const getIntXY = (x: number, y: number) => {
-            var rect = overlay.getBoundingClientRect();
+            let rect = overlay.getBoundingClientRect();
+
+            // get the actual video rectangle (assuming center fit)
+            const rasp = rect.width / rect.height;
+            const vasp = this.streamHeader!.videoWidth / this.streamHeader!.videoHeight;
+            if (rasp > vasp) {
+                const w = rect.width * vasp / rasp;
+                rect.x += (rect.width - w) / 2;
+                rect.width = w;
+            } else {
+               const h = rect.height * rasp / vasp;
+               rect.y += (rect.height - h) / 2;
+               rect.height = h;
+            }   
+
             return {
                 x: Math.round(((x - rect.left) * this.streamHeader!.videoWidth) / rect.width),
                 y: Math.round(((y - rect.top) * this.streamHeader!.videoHeight) / rect.height),

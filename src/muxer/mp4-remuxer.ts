@@ -26,8 +26,8 @@ export class MP4Remuxer {
 
     private ISGenerated = false;
     private nextAvcDts = 0;
-    private _initPTS: number | undefined = undefined;
-    private _initDTS: number | undefined = undefined;
+    private _initPTS?: number;
+    private _initDTS?: number;
     private config: MP4RemuxerConfig;
 
     insertDiscontinuity() {
@@ -123,14 +123,8 @@ export class MP4Remuxer {
                 });
                 lastDTS = dtsnorm;
             }
-
-            let lastSampleDuration = 0;
-            if (outputSamples.length >= 2) {
-                lastSampleDuration = outputSamples[outputSamples.length - 2].duration;
-                outputSamples[0].duration = lastSampleDuration;
-            }
-            this.nextAvcDts = dtsnorm + lastSampleDuration;
-           
+            this.nextAvcDts = dtsnorm;
+         
             if (outputSamples.length && navigator.userAgent.toLowerCase().indexOf("chrome") > -1) {
                 let flags = outputSamples[0].flags;
                 flags.dependsOn = 2;
@@ -184,7 +178,7 @@ export class MP4Remuxer {
         }
     }
 
-    private _PTSNormalize(value: number, reference: number) {
+    private _PTSNormalize(value: number, reference?: number) {
         if (reference === undefined) {
             return value;
         }
