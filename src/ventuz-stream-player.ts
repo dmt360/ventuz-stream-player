@@ -19,10 +19,13 @@ const statusMsgs = {
 type StatusType = keyof typeof statusMsgs;
 
 class VentuzStreamPlayer extends HTMLElement {
-   
+    
     // parameters
     url = "";
     extraLatency = 0;
+    useKeyboard = true;
+    useMouse = true;
+    useTouch = true;
 
     // state
     private ws?: WebSocket;
@@ -31,6 +34,8 @@ class VentuzStreamPlayer extends HTMLElement {
     private mediaSource?: MediaSource;
     private vidSrcBuffer?: SourceBuffer;
     private lastKeyFrameIndex = 0;
+    private lastLatency = 0;
+    private codec?: string;
 
     private video?: HTMLVideoElement;
     private statusLine?: HTMLDivElement;
@@ -38,10 +43,6 @@ class VentuzStreamPlayer extends HTMLElement {
     private h264Demuxer?: H264Demuxer;
     private mp4Remuxer?: MP4Remuxer;
     private queue: Uint8Array[] = [];
-
-    private codec?: string;
-
-    private lastLatency = 0;
 
     private createSrcBuffer() {
         if (this.mediaSource) {
@@ -77,8 +78,8 @@ class VentuzStreamPlayer extends HTMLElement {
             hdr.videoFrameRateDen *= 10;
         }
 
-        if (this.streamHeader.videoCodecFourCC !== 1748121140) {
-            logger.error("Unsupported codec", this.streamHeader.videoCodecFourCC);
+        if (this.streamHeader.videoCodecFourCC !== 0x68323634) { // h264 only
+            logger.error("Unsupported codec", this.streamHeader.videoCodecFourCC.toString(16));
             this.setStatus("errBadFormat");
             return false;
         }
@@ -130,7 +131,7 @@ class VentuzStreamPlayer extends HTMLElement {
             width: hdr.videoWidth,
             height: hdr.videoHeight,
             timeBase: hdr.videoFrameRateDen,
-            fragSize: Math.max(1, Math.ceil( this.extraLatency * hdr.videoFrameRateNum / hdr.videoFrameRateDen )),
+            fragSize: Math.max(1, Math.ceil((this.extraLatency * hdr.videoFrameRateNum) / hdr.videoFrameRateDen)),
 
             onBufferReset: (codec) => {
                 this.codec = codec;
@@ -173,7 +174,6 @@ class VentuzStreamPlayer extends HTMLElement {
                 const bufferThreshold = 5 + this.extraLatency;
 
                 if (currentTime - start >= 2 * bufferThreshold) {
-
                     // check if player has gotten behind and jump forwards
                     const frametime = this.streamHeader!.videoFrameRateDen / this.streamHeader!.videoFrameRateNum;
                     const max = end - this.lastLatency - 2 * frametime;
@@ -197,8 +197,7 @@ class VentuzStreamPlayer extends HTMLElement {
         switch (pkg.type) {
             case "connected":
                 // create and connect muxer
-                if (this.openStream(pkg.data))
-                    this.setStatus("playing");
+                if (this.openStream(pkg.data)) this.setStatus("playing");
                 break;
             case "disconnected":
                 this.closeStream();
@@ -276,7 +275,7 @@ class VentuzStreamPlayer extends HTMLElement {
     }
 
     sendCommand(cmd: StreamOut.Command) {
-        if (this.ws && this.ws.readyState === this.ws.OPEN) {
+        if (this.ws && this.ws.readyState === this.ws.OPEN && this.streamHeader) {
             //logger.log("sendcmd", cmd);
             this.ws.send(JSON.stringify(cmd));
         }
@@ -295,7 +294,7 @@ class VentuzStreamPlayer extends HTMLElement {
         super();
     }
 
-    static observedAttributes = ["url", "latency"];
+    static observedAttributes = ["url", "latency", "noinput", "nokeyboard", "nomouse", "notouch"];
 
     attributeChangedCallback(name: string, oldValue: string | null, newValue: string | null) {
         switch (name) {
@@ -306,6 +305,18 @@ class VentuzStreamPlayer extends HTMLElement {
             case "latency":
                 this.extraLatency = Math.max(0, Math.min(60, parseFloat(newValue ?? "0") || 0));
                 if (newValue !== oldValue && this.ws) this.openWS();
+                break;
+            case "noinput":
+                this.useKeyboard = this.useMouse = this.useTouch = newValue === null;
+                break;
+            case "nokeyboard":
+                this.useKeyboard = newValue === null;
+                break;
+            case "nomouse":
+                this.useMouse = newValue === null;
+                break;
+            case "notouch":
+                this.useTouch = newValue === null;
                 break;
         }
     }
@@ -328,11 +339,10 @@ class VentuzStreamPlayer extends HTMLElement {
         };
 
         video.onplay = (_) => {
-            if (this.vidSrcBuffer && this.streamHeader) {
+            if (this.vidSrcBuffer) {
                 const currentTime = this.video?.currentTime ?? 0;
                 let end = this.vidSrcBuffer.buffered.end(0);
                 logger.log("onplay", currentTime, end);
-                //end -= 1 * this.streamHeader.videoFrameRateDen / this.streamHeader.videoFrameRateNum;
                 if (end > currentTime) {
                     logger.log("jump!", currentTime, end);
                     video.currentTime = end;
@@ -353,106 +363,116 @@ class VentuzStreamPlayer extends HTMLElement {
         }
 
         const getIntXY = (x: number, y: number) => {
+            if (!this.streamHeader) return { x, y };
             let rect = overlay.getBoundingClientRect();
 
             // get the actual video rectangle (assuming center fit)
             const rasp = rect.width / rect.height;
-            const vasp = this.streamHeader!.videoWidth / this.streamHeader!.videoHeight;
+            const vasp = this.streamHeader.videoWidth / this.streamHeader.videoHeight;
             if (rasp > vasp) {
-                const w = rect.width * vasp / rasp;
+                const w = (rect.width * vasp) / rasp;
                 rect.x += (rect.width - w) / 2;
                 rect.width = w;
             } else {
-               const h = rect.height * rasp / vasp;
-               rect.y += (rect.height - h) / 2;
-               rect.height = h;
-            }   
+                const h = (rect.height * rasp) / vasp;
+                rect.y += (rect.height - h) / 2;
+                rect.height = h;
+            }
 
             return {
-                x: Math.round(((x - rect.left) * this.streamHeader!.videoWidth) / rect.width),
-                y: Math.round(((y - rect.top) * this.streamHeader!.videoHeight) / rect.height),
+                x: Math.round(((x - rect.left) * this.streamHeader.videoWidth) / rect.width),
+                y: Math.round(((y - rect.top) * this.streamHeader.videoHeight) / rect.height),
             };
         };
 
         overlay.onpointerdown = (e) => {
-            if (this.streamHeader) {
-                if (e.pointerType === "mouse") {
-                    // turns out JS and the stream device use the same order of buttons, so no mapping necessary here
-                    this.sendCommand({ type: "mouseButtons", data: e.buttons });
-                    overlay.setPointerCapture(e.pointerId);
-                }
+            //console.log("pointerdown", e.pointerType, e.pointerId);
 
-                if (e.pointerType === "touch") {
-                    this.sendCommand({
-                        type: "touchBegin",
-                        data: {
-                            ...getIntXY(e.clientX, e.clientY),
-                            id: e.pointerId,
-                        },
-                    });
-                }
+            if (e.pointerType === "mouse") {
+                if (!this.useMouse) return;
+                // turns out JS and the stream device use the same order of buttons, so no mapping necessary here
+                this.sendCommand({ type: "mouseButtons", data: e.buttons });
+
+                overlay.focus();
+                overlay.setPointerCapture(e.pointerId);
+                e.stopPropagation();
+                e.preventDefault();
             }
 
-            overlay.focus();
-
-            e.stopPropagation();
-            e.preventDefault();
+            if (e.pointerType === "touch") {
+                if (!this.useTouch) return;
+                this.sendCommand({
+                    type: "touchBegin",
+                    data: {
+                        ...getIntXY(e.clientX, e.clientY),
+                        id: e.pointerId,
+                    },
+                });
+                overlay.focus();
+                e.stopPropagation();
+                e.preventDefault();
+            }
         };
 
         overlay.onpointerup = (e) => {
-            if (this.streamHeader) {
-                if (e.pointerType === "mouse") {
-                    // turns out JS and the stream device use the same order of buttons, so no mapping necessary here
-                    this.sendCommand({ type: "mouseButtons", data: e.buttons });
-                    overlay.releasePointerCapture(e.pointerId);
-                }
-
-                if (e.pointerType === "touch") {
-                    this.sendCommand({
-                        type: "touchEnd",
-                        data: {
-                            ...getIntXY(e.clientX, e.clientY),
-                            id: e.pointerId,
-                        },
-                    });
-                }
+            //console.log("pointerup", e.pointerType, e.pointerId);
+            if (e.pointerType === "mouse") {
+                if (!this.useMouse) return;
+                // turns out JS and the stream device use the same order of buttons, so no mapping necessary here
+                this.sendCommand({ type: "mouseButtons", data: e.buttons });
+                overlay.releasePointerCapture(e.pointerId);
+                e.stopPropagation();
+                e.preventDefault();
             }
 
-            e.stopPropagation();
-            e.preventDefault();
+            if (e.pointerType === "touch") {
+                if (!this.useTouch) return;
+                this.sendCommand({
+                    type: "touchEnd",
+                    data: {
+                        ...getIntXY(e.clientX, e.clientY),
+                        id: e.pointerId,
+                    },
+                });
+                e.stopPropagation();
+                e.preventDefault();
+            }
         };
 
         overlay.onpointermove = (e) => {
-            if (this.streamHeader) {
-                if (e.pointerType === "mouse") {
-                    this.sendCommand({
-                        type: "mouseMove",
-                        data: getIntXY(e.x, e.y),
-                    });
-                }
-
-                if (e.pointerType === "touch") {
-                    this.sendCommand({
-                        type: "touchMove",
-                        data: {
-                            ...getIntXY(e.clientX, e.clientY),
-                            id: e.pointerId,
-                        },
-                    });
-                }
+            //console.log("pointermove", e.pointerType, e.pointerId);
+            if (e.pointerType === "mouse") {
+                if (!this.useMouse) return;
+                this.sendCommand({
+                    type: "mouseMove",
+                    data: getIntXY(e.x, e.y),
+                });
+                e.stopPropagation();
+                e.preventDefault();
             }
 
-            e.stopPropagation();
-            e.preventDefault();
-        };
-
-        overlay.onpointerover = (e) => {
-            e.stopPropagation();
-            e.preventDefault();
+            if (e.pointerType === "touch") {
+                if (!this.useTouch) return;
+                this.sendCommand({
+                    type: "touchMove",
+                    data: {
+                        ...getIntXY(e.clientX, e.clientY),
+                        id: e.pointerId,
+                    },
+                });
+                e.stopPropagation();
+                e.preventDefault();
+            }
         };
 
         overlay.onpointercancel = (e) => {
-            if (this.streamHeader && e.pointerType === "touch") {
+            if (e.pointerType === "mouse") {
+                if (!this.useMouse) return;
+                e.stopPropagation();
+                e.preventDefault();
+            }
+            if (e.pointerType === "touch") {
+                if (!this.useTouch) return;
                 this.sendCommand({
                     type: "touchCancel",
                     data: {
@@ -460,14 +480,20 @@ class VentuzStreamPlayer extends HTMLElement {
                         id: e.pointerId,
                     },
                 });
+                e.stopPropagation();
+                e.preventDefault();
             }
-
-            e.stopPropagation();
-            e.preventDefault();
         };
 
         overlay.onpointerout = (e) => {
-            if (this.streamHeader && e.pointerType === "touch") {
+            if (e.pointerType === "mouse") {
+                if (!this.useMouse) return;
+                e.stopPropagation();
+                e.preventDefault();
+            }
+
+            if (e.pointerType === "touch") {
+                if (!this.useTouch) return;
                 this.sendCommand({
                     type: "touchCancel",
                     data: {
@@ -475,40 +501,43 @@ class VentuzStreamPlayer extends HTMLElement {
                         id: e.pointerId,
                     },
                 });
+                e.stopPropagation();
+                e.preventDefault();
             }
-
-            e.stopPropagation();
-            e.preventDefault();
         };
 
         overlay.onwheel = (e) => {
-            if (this.streamHeader)
-                this.sendCommand({
-                    type: "mouseWheel",
-                    data: { x: -e.deltaX, y: -e.deltaY },
-                });
+            if (!this.useMouse) return;
+            this.sendCommand({
+                type: "mouseWheel",
+                data: { x: -e.deltaX, y: -e.deltaY },
+            });
             e.stopPropagation();
             e.preventDefault();
         };
 
         overlay.onclick = async (e) => {
             video.play();
+            if (!this.useMouse) return;
             e.stopPropagation();
             e.preventDefault();
         };
 
         overlay.oncontextmenu = (e) => {
+            if (!this.useMouse) return;
             e.stopPropagation();
             e.preventDefault();
         };
 
         overlay.onkeypress = (e) => {
             // logger.log("press", e);
+            if (!this.useKeyboard) return;
             e.stopPropagation();
             e.preventDefault();
         };
 
         overlay.onkeyup = (e) => {
+            if (!this.useKeyboard) return;
             this.sendCommand({ type: "keyUp", data: e.keyCode });
             e.stopPropagation();
             e.preventDefault();
@@ -516,6 +545,7 @@ class VentuzStreamPlayer extends HTMLElement {
 
         overlay.onkeydown = (e) => {
             //logger.log(e);
+            if (!this.useKeyboard) return;
             this.sendCommand({ type: "keyDown", data: e.keyCode });
             this.sendCommand({
                 type: "char",
