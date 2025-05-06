@@ -54,95 +54,99 @@ export class MP4Remuxer {
         const inputSamples = track.samples,
             outputSamples: MP4.VideoSample[] = [];
 
-        let offset = 8;
+        try {
+            let offset = 8;
 
-        // concatenate the video data and construct the mdat in place
-        // (need 8 more bytes to fill length and mdat type)
-        const mdat = new Uint8Array(track.len + 4 * track.nbNalu + 8);
-        let view = new DataView(mdat.buffer);
-        view.setUint32(0, mdat.byteLength);
-        mdat.set(MP4.types.mdat, 4);
-        let ptsnorm,
-            dtsnorm = 0,
-            lastDTS;
+            // concatenate the video data and construct the mdat in place
+            // (need 8 more bytes to fill length and mdat type)
+            const mdat = new Uint8Array(track.len + 4 * track.nbNalu + 8);
+            let view = new DataView(mdat.buffer);
+            view.setUint32(0, mdat.byteLength);
+            mdat.set(MP4.types.mdat, 4);
+            let ptsnorm : number,
+                dtsnorm = 0,
+                lastDTS : number | undefined;
 
-        for (let i = 0; i < inputSamples.length; i++) {
-            let avcSample = inputSamples[i],
-                mp4SampleLength = 0;
-            // convert NALU bitstream to MP4 format (prepend NALU with size field)
-            while (avcSample.units.length) {
-                let unit = avcSample.units.shift()!;
-                view.setUint32(offset, unit.data.byteLength);
-                offset += 4;
-                mdat.set(unit.data, offset);
-                offset += unit.data.byteLength;
-                mp4SampleLength += 4 + unit.data.byteLength;
-            }
+            for (let i = 0; i < inputSamples.length; i++) {
+                let avcSample = inputSamples[i],
+                    mp4SampleLength = 0;
+                // convert NALU bitstream to MP4 format (prepend NALU with size field)
+                while (avcSample.units.length) {
+                    let unit = avcSample.units.shift()!;
+                    view.setUint32(offset, unit.data.byteLength);
+                    offset += 4;
+                    mdat.set(unit.data, offset);
+                    offset += unit.data.byteLength;
+                    mp4SampleLength += 4 + unit.data.byteLength;
+                }
 
-            let pts = avcSample.pts - this._initPTS!;
-            let dts = avcSample.dts - this._initDTS!;
-            dts = Math.min(pts, dts);
+                let pts = avcSample.pts - this._initPTS!;
+                let dts = avcSample.dts - this._initDTS!;
+                dts = Math.min(pts, dts);
 
-            if (lastDTS !== undefined) {
-                ptsnorm = this._PTSNormalize(pts, lastDTS);
-                dtsnorm = this._PTSNormalize(dts, lastDTS);
-            } else {
-                const nextAvcDts = this.nextAvcDts;
-                ptsnorm = this._PTSNormalize(pts, nextAvcDts);
-                dtsnorm = this._PTSNormalize(dts, nextAvcDts);
-                if (nextAvcDts) {
-                    const delta = Math.round(dtsnorm - nextAvcDts);
-                    if (Math.abs(delta) < 600) {
-                        if (delta) {
-                            if (delta > 1) {
-                                logger.log(`AVC:${delta} ms hole between fragments detected,filling it`);
-                            } else if (delta < -1) {
-                                logger.log(`AVC:${-delta} ms overlapping between fragments detected`);
+                if (lastDTS !== undefined) {
+                    ptsnorm = this._PTSNormalize(pts, lastDTS);
+                    dtsnorm = this._PTSNormalize(dts, lastDTS);
+                } else {
+                    const nextAvcDts = this.nextAvcDts;
+                    ptsnorm = this._PTSNormalize(pts, nextAvcDts);
+                    dtsnorm = this._PTSNormalize(dts, nextAvcDts);
+                    if (nextAvcDts) {
+                        const delta = Math.round(dtsnorm - nextAvcDts);
+                        if (Math.abs(delta) < 600) {
+                            if (delta) {
+                                if (delta > 1) {
+                                    logger.log(`AVC:${delta} ms hole between fragments detected,filling it`);
+                                } else if (delta < -1) {
+                                    logger.log(`AVC:${-delta} ms overlapping between fragments detected`);
+                                }
+                                dtsnorm = nextAvcDts;
+                                ptsnorm = Math.max(ptsnorm - delta, dtsnorm);
+                                logger.log(`Video/PTS/DTS adjusted: ${ptsnorm}/${dtsnorm},delta:${delta}`);
                             }
-                            dtsnorm = nextAvcDts;
-                            ptsnorm = Math.max(ptsnorm - delta, dtsnorm);
-                            logger.log(`Video/PTS/DTS adjusted: ${ptsnorm}/${dtsnorm},delta:${delta}`);
                         }
                     }
                 }
+
+                outputSamples.push({
+                    size: mp4SampleLength,
+                    duration: this.config.timeBase,
+                    cts: 0,
+                    flags: {
+                        dependsOn: avcSample.key ? 2 : 1,
+                        isNonSync: avcSample.key ? 0 : 1,
+                    },
+                    pts,
+                    dts,
+                    key: avcSample.key,
+                    units: [],
+                });
+                lastDTS = dtsnorm;
             }
 
-            outputSamples.push({
-                size: mp4SampleLength,
-                duration: this.config.timeBase,
-                cts: 0,
-                flags: {
-                    dependsOn: avcSample.key ? 2 : 1,
-                    isNonSync: avcSample.key ? 0 : 1,
-                },
-                pts,
-                dts,
-                key: avcSample.key,
-                units: [],
-            });
-            lastDTS = dtsnorm;
-        }
+            let lastSampleDuration = 0;
+            if (outputSamples.length >= 2) {
+                lastSampleDuration = outputSamples[outputSamples.length - 2].duration;
+                outputSamples[0].duration = lastSampleDuration;
+            }
+            this.nextAvcDts = dtsnorm + lastSampleDuration;
+           
+            if (outputSamples.length && navigator.userAgent.toLowerCase().indexOf("chrome") > -1) {
+                let flags = outputSamples[0].flags;
+                flags.dependsOn = 2;
+                flags.isNonSync = 0;
+            }
+            track.samples = outputSamples;
 
-        let lastSampleDuration = 0;
-        if (outputSamples.length >= 2) {
-            lastSampleDuration = outputSamples[outputSamples.length - 2].duration;
-            outputSamples[0].duration = lastSampleDuration;
+            const moof = MP4.moof(track.sequenceNumber++, dtsnorm, track);
+            this.config.onData(moof);
+            this.config.onData(mdat);            
+        } catch (e) {
+            logger.error("Error while remuxing video track", e);
         }
-        this.nextAvcDts = dtsnorm + lastSampleDuration;
-
+        track.samples = [];       
         track.len = 0;
-        track.nbNalu = 0;
-        if (outputSamples.length && navigator.userAgent.toLowerCase().indexOf("chrome") > -1) {
-            let flags = outputSamples[0].flags;
-            flags.dependsOn = 2;
-            flags.isNonSync = 0;
-        }
-        track.samples = outputSamples;
-        const moof = MP4.moof(track.sequenceNumber++, dtsnorm, track);
-        track.samples = [];
-
-        this.config.onData(moof);
-        this.config.onData(mdat);
+        track.nbNalu = 0;        
     }
 
     private generateVideoIS(videoTrack: MP4.VideoTrack) {

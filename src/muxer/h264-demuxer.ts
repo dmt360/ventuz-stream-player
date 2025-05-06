@@ -43,6 +43,7 @@ export class H264Demuxer {
         let units2: typeof units = [],
             key = false,
             frame = false,
+            length = 0,
             debugString = "";
 
         units.forEach((unit) => {
