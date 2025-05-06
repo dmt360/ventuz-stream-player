@@ -1,7 +1,7 @@
 {
   "private": true,
   "name": "ventuz-stream-player",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "author": "Tammo Hinrichs <tammo.hinrichs@ventuz.com> (https://ventuz.com/)",
   "description": "A web component for showing and interacting with Ventuz Stream Out outputs",
   "homepage": "https://github.com/VentuzTechnology/streamout-webcomponent",

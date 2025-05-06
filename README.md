@@ -16,4 +16,10 @@ Usage:
   - put that tarball somewhere and add a dependency in your package.json like this:
     `"ventuz-stream-player": "somefolder/ventuz-stream-player-<version>.tgz"`
 - Others: Just include dist/ventuz-stream-player-min.js in your project
-- For the rest, check out dist/index.html, it's not really hard :)
+
+Attributes:
+- url: URL of the websocket endpoint, eg. "http://localhost:22404/remoting/2.0/streamoutws?o=0"
+- latency: Minimum playback latency in seconds
+- noinput/nokeyboard/nomouse/notouch: disable all input / keyboard / mouse / touch
+
+
