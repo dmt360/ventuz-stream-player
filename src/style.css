@@ -38,3 +38,28 @@ ventuz-stream-player .vsp-statusdisplay {
     color: white;
     text-shadow: 2px 2px 2px rgba(0, 0, 0, 1);
 }
+
+ventuz-stream-player .vsp-fsbutton {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: fit-content;
+    height: fit-content;
+    text-align: center;
+    margin: 0.5em;
+    background-color: rgba(255, 255, 255, 0.5); /* Half-transparent white */
+    border-radius: 8px; /* Rounded corners */
+    padding: 0.5em 1em; /* Add some padding for a button-like appearance */
+    border: none; /* Remove default border */
+    cursor: pointer; /* Change cursor to pointer for better UX */
+    font-size: 1em; /* Adjust font size */
+    color: black; /* Text color for contrast */
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2); /* Add a subtle shadow */
+    transition: background-color 0.3s ease; /* Smooth hover effect */
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell,
+    "Open Sans", "Helvetica Neue", sans-serif;
+}
+
+ventuz-stream-player .vsp-fsbutton:hover {
+    background-color: rgba(255, 255, 255, 0.7); /* Slightly less transparent on hover */
+}

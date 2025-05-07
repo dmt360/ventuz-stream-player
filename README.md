@@ -21,5 +21,4 @@ Attributes:
 - url: URL of the websocket endpoint, eg. "http://localhost:22404/remoting/2.0/streamoutws?o=0"
 - latency: Minimum playback latency in seconds
 - noinput/nokeyboard/nomouse/notouch: disable all input / keyboard / mouse / touch
-
-
+- fullscreenbutton: display a button to enter fullscreen

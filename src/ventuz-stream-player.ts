@@ -26,6 +26,7 @@ class VentuzStreamPlayer extends HTMLElement {
     useKeyboard = true;
     useMouse = true;
     useTouch = true;
+    fullscreenButton = false;
 
     // state
     private ws?: WebSocket;
@@ -294,7 +295,7 @@ class VentuzStreamPlayer extends HTMLElement {
         super();
     }
 
-    static observedAttributes = ["url", "latency", "noinput", "nokeyboard", "nomouse", "notouch"];
+    static observedAttributes = ["url", "latency", "noinput", "nokeyboard", "nomouse", "notouch", "fullscreenbutton"];
 
     attributeChangedCallback(name: string, oldValue: string | null, newValue: string | null) {
         switch (name) {
@@ -317,6 +318,9 @@ class VentuzStreamPlayer extends HTMLElement {
                 break;
             case "notouch":
                 this.useTouch = newValue === null;
+                break;
+            case "fullscreenbutton":
+                this.fullscreenButton = newValue !== null;     
                 break;
         }
     }
@@ -353,7 +357,7 @@ class VentuzStreamPlayer extends HTMLElement {
         const status = (this.statusLine = document.createElement("div"));
         status.className = "vsp-statusdisplay";
 
-        const overlay = /*this.overlay =*/ document.createElement("div");
+        const overlay =  document.createElement("div");
         overlay.tabIndex = 0;
         overlay.appendChild(status);
 
@@ -557,6 +561,27 @@ class VentuzStreamPlayer extends HTMLElement {
 
         this.appendChild(video);
         this.appendChild(overlay);
+        
+        if (this.fullscreenButton && document.fullscreenEnabled) {
+            const fsbutton = document.createElement("div");
+            fsbutton.className = "vsp-fsbutton";
+            fsbutton.innerText = "Fullscreen";
+            if (document.fullscreenElement) 
+                fsbutton.style.visibility = "hidden";                    
+
+            fsbutton.onclick = () => {
+                this.requestFullscreen();
+            }
+
+            this.onfullscreenchange = () => {
+                if (document.fullscreenElement) {
+                    fsbutton.style.visibility = "hidden";                    
+                } else {
+                    fsbutton.style.visibility = "visible";                    
+                }
+            }
+            this.appendChild(fsbutton);
+        }
 
         this.openWS();
     }
