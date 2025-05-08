@@ -4,9 +4,14 @@
   "version": "0.8.0",
   "author": "Tammo Hinrichs <tammo.hinrichs@ventuz.com> (https://ventuz.com/)",
   "description": "A web component for showing and interacting with Ventuz Stream Out outputs",
-  "homepage": "https://github.com/VentuzTechnology/streamout-webcomponent",
-  "repository": { "type": "git", "url": "https://github.com/VentuzTechnology/streamout-webcomponent.git" },
+  "homepage": "https://github.com/VentuzTechnology/ventuz-stream-player",
+  "bugs": {
+    "url": "https://github.com/VentuzTechnology/ventuz-stream-player/issues"
+  },
+  "keywords": [ "ventuz", "webcomponent", "mediaserver", "streaming", "video" ],
+  "repository": { "type": "git", "url": "https://github.com/VentuzTechnology/ventuz-stream-player.git" },
   "license": "MIT",
+  
   "type": "module",
   "main": "./dist/ventuz-stream-player-min.js",
   "files": [
