@@ -129,7 +129,7 @@ export class H264Demuxer {
         }
         //if (this.firefox || track.samples.length >= 2) {
         if (track.samples.length >= this.config.fragSize) {
-                this.config.onData(this._avcTrack);
+            this.config.onData(this._avcTrack);
         }
     }
 

@@ -19,7 +19,6 @@ const statusMsgs = {
 type StatusType = keyof typeof statusMsgs;
 
 class VentuzStreamPlayer extends HTMLElement {
-    
     // parameters
     url = "";
     extraLatency = 0;
@@ -37,7 +36,7 @@ class VentuzStreamPlayer extends HTMLElement {
     private lastKeyFrameIndex = 0;
     private lastLatency = 0;
     private codec?: string;
-    private parseBin?: (arr: Uint8Array) => void ;
+    private parseBin?: (arr: Uint8Array) => void;
 
     private video?: HTMLVideoElement;
     private statusLine?: HTMLDivElement;
@@ -80,7 +79,8 @@ class VentuzStreamPlayer extends HTMLElement {
             hdr.videoFrameRateDen *= 10;
         }
 
-        if (this.streamHeader.videoCodecFourCC !== 0x68323634) { // h264 only
+        if (this.streamHeader.videoCodecFourCC !== 0x68323634) {
+            // h264 only
             logger.error("Unsupported codec", this.streamHeader.videoCodecFourCC.toString(16));
             this.setStatus("errBadFormat");
             return false;
@@ -212,7 +212,7 @@ class VentuzStreamPlayer extends HTMLElement {
                 break;
             case "frame":
                 this.frameHeader = pkg.data;
-                this.parseBin = arr => this.handleVideoFrame(arr);
+                this.parseBin = (arr) => this.handleVideoFrame(arr);
                 break;
             default:
                 logger.log("unknown packet type", (pkg as any).type);
@@ -271,12 +271,10 @@ class VentuzStreamPlayer extends HTMLElement {
             if (typeof ev.data === "string") {
                 this.handlePacket(JSON.parse(ev.data) as StreamOut.StreamPacket);
                 return;
-            }
-            else if (this.parseBin) {
+            } else if (this.parseBin) {
                 this.parseBin(new Uint8Array(ev.data as ArrayBuffer));
                 delete this.parseBin;
             }
-
         };
     }
 
@@ -325,7 +323,7 @@ class VentuzStreamPlayer extends HTMLElement {
                 this.useTouch = newValue === null;
                 break;
             case "fullscreenbutton":
-                this.fullscreenButton = newValue !== null;     
+                this.fullscreenButton = newValue !== null;
                 break;
         }
     }
@@ -362,7 +360,7 @@ class VentuzStreamPlayer extends HTMLElement {
         const status = (this.statusLine = document.createElement("div"));
         status.className = "vsp-statusdisplay";
 
-        const overlay =  document.createElement("div");
+        const overlay = document.createElement("div");
         overlay.tabIndex = 0;
         overlay.appendChild(status);
 
@@ -566,25 +564,24 @@ class VentuzStreamPlayer extends HTMLElement {
 
         this.appendChild(video);
         this.appendChild(overlay);
-        
+
         if (this.fullscreenButton && document.fullscreenEnabled) {
             const fsbutton = document.createElement("div");
             fsbutton.className = "vsp-fsbutton";
             fsbutton.innerText = "Fullscreen";
-            if (document.fullscreenElement) 
-                fsbutton.style.visibility = "hidden";                    
+            if (document.fullscreenElement) fsbutton.style.visibility = "hidden";
 
             fsbutton.onclick = () => {
                 this.requestFullscreen();
-            }
+            };
 
             this.onfullscreenchange = () => {
                 if (document.fullscreenElement) {
-                    fsbutton.style.visibility = "hidden";                    
+                    fsbutton.style.visibility = "hidden";
                 } else {
-                    fsbutton.style.visibility = "visible";                    
+                    fsbutton.style.visibility = "visible";
                 }
-            }
+            };
             this.appendChild(fsbutton);
         }
 

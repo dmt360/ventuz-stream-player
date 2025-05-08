@@ -63,9 +63,9 @@ export class MP4Remuxer {
             let view = new DataView(mdat.buffer);
             view.setUint32(0, mdat.byteLength);
             mdat.set(MP4.types.mdat, 4);
-            let ptsnorm : number,
+            let ptsnorm: number,
                 dtsnorm = 0,
-                lastDTS : number | undefined;
+                lastDTS: number | undefined;
 
             for (let i = 0; i < inputSamples.length; i++) {
                 let avcSample = inputSamples[i],
@@ -124,7 +124,7 @@ export class MP4Remuxer {
                 lastDTS = dtsnorm;
             }
             this.nextAvcDts = dtsnorm;
-         
+
             if (outputSamples.length && navigator.userAgent.toLowerCase().indexOf("chrome") > -1) {
                 let flags = outputSamples[0].flags;
                 flags.dependsOn = 2;
@@ -134,13 +134,13 @@ export class MP4Remuxer {
 
             const moof = MP4.moof(track.sequenceNumber++, dtsnorm, track);
             this.config.onData(moof);
-            this.config.onData(mdat);            
+            this.config.onData(mdat);
         } catch (e) {
             logger.error("Error while remuxing video track", e);
         }
-        track.samples = [];       
+        track.samples = [];
         track.len = 0;
-        track.nbNalu = 0;        
+        track.nbNalu = 0;
     }
 
     private generateVideoIS(videoTrack: MP4.VideoTrack) {
