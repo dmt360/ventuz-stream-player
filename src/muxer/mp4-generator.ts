@@ -1,5 +1,10 @@
 /**
  * Generate MP4 Box
+ * 
+ * Originally from https://github.com/dailymotion/hls.js
+ * Copyright (c) 2017 Dailymotion, licensed under the Apache License, Version 2.0 
+ * 
+ * Typescript conversion and modifications by Tammo Hinrichs
  */
 
 export type Unit = {

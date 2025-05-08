@@ -1,3 +1,10 @@
+/**
+ * Ventuz Stream Player
+ * A web component for playing back Ventuz Stream Out outputs in the browser, 
+ * with keyboard, mouse, and touch input support.
+ * Copyright (c) 2025 Ventuz Technology, all rights reserved.
+ */
+
 import { H264Demuxer } from "./muxer/h264-demuxer";
 import { MP4Remuxer } from "./muxer/mp4-remuxer";
 import { logger } from "./muxer/logger";

@@ -1,5 +1,10 @@
 /**
+  H264 parser/demuxer
 
+  Originally from https://github.com/ChihChengYang/wfs.js 
+  Copyright (c) 2018 ChihChengYang, licensed under the BSD-2-Clause license
+
+  Typescript conversion and modifications by Tammo Hinrichs
 */
 import * as MP4 from "./mp4-generator";
 import { logger } from "./logger";

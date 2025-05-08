@@ -1,6 +1,12 @@
 /**
  * fMP4 remuxer
+ * 
+ * Originally from https://github.com/dailymotion/hls.js
+ * Copyright (c) 2017 Dailymotion, licensed under the Apache License, Version 2.0 
+ * 
+ * Typescript conversion and modifications by Tammo Hinrichs
  */
+
 import * as MP4 from "./mp4-generator";
 import { logger } from "./logger";
 
