@@ -37,6 +37,7 @@ class VentuzStreamPlayer extends HTMLElement {
     private lastKeyFrameIndex = 0;
     private lastLatency = 0;
     private codec?: string;
+    private parseBin?: (arr: Uint8Array) => void ;
 
     private video?: HTMLVideoElement;
     private statusLine?: HTMLDivElement;
@@ -211,9 +212,10 @@ class VentuzStreamPlayer extends HTMLElement {
                 break;
             case "frame":
                 this.frameHeader = pkg.data;
+                this.parseBin = arr => this.handleVideoFrame(arr);
                 break;
             default:
-                logger.error("unknown packet type", (pkg as any).type);
+                logger.log("unknown packet type", (pkg as any).type);
                 break;
         }
     }
@@ -270,8 +272,11 @@ class VentuzStreamPlayer extends HTMLElement {
                 this.handlePacket(JSON.parse(ev.data) as StreamOut.StreamPacket);
                 return;
             }
+            else if (this.parseBin) {
+                this.parseBin(new Uint8Array(ev.data as ArrayBuffer));
+                delete this.parseBin;
+            }
 
-            this.handleVideoFrame(new Uint8Array(ev.data as ArrayBuffer));
         };
     }
 
