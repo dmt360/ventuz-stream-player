@@ -43,6 +43,11 @@ You can style the appearance of ventuz-stream-player by overriding the following
 * `ventuz-stream-player .vsp-statusdisplay` for the status display (errors, etc)
 * `ventuz-stream-player .vsp-fsbutton` for the fullscreen button
 
+#### Internationalization
+
+You can change the error message strings by listening to the `ventuz-stream-player:strings` event. The event details contain an object with 
+all built-in messages; just change the strings in that object to anything you'd like. For a list of all possible strings, check the `defaultStatusMsgs` object in `ventuz-stream-player.ts´.
+
 ## Building
 
 This project is using [npm](https://www.npmjs.com/) and [Vite](https://vite.dev/) so the usual commands apply:

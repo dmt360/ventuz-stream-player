@@ -1,26 +1,39 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>StreamOut Web Component test</title>
 
-  <head>
-    <meta charset="UTF-8" />    
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>StreamOut Web Component test</title>
-    <script type="module" src="/src/ventuz-stream-player.ts"></script>
+        <!-- include the js bundle -->
+        <script type="module" src="/src/ventuz-stream-player.ts"></script>
 
-    <style>
-      body {
-        background-color: #222;
-        margin: 0;
-        display: flex;
-        height: 100vh;
-        justify-content: center;
-        align-items: center;
-      }
-    </style>
-  </head>
+        <style>
+            body {
+                background-color: #222;
+                margin: 0;
+                display: flex;
+                height: 100vh;
+                justify-content: center;
+                align-items: center;
+            }
+        </style>
+    </head>
 
-  <body>
-    <ventuz-stream-player url="http://localhost:22404/remoting/2.0/streamoutws?o=0" latency="0" fullscreenbutton></ventuz-stream-player>
-  </body>
-  
+    <body>
+        <!-- add player somewhere inside your DOM -->
+        <ventuz-stream-player
+            id="player"
+            url="http://localhost:22404/remoting/2.0/streamoutws?o=0"
+            latency="0"
+            fullscreenbutton
+        ></ventuz-stream-player>
+
+        <!-- localization example  -->
+        <script>
+            document.getElementById("player").addEventListener("ventuz-stream-player:strings", event => {
+                event.detail.noStream = "No stream available";
+            });
+        </script>
+    </body>
 </html>

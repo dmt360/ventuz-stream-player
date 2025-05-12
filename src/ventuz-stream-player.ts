@@ -12,7 +12,7 @@ import { logger } from "./muxer/logger";
 import "./style.css";
 
 // localize me, or something
-const statusMsgs = {
+const defaultStatusMsgs = {
     connecting: "Connecting...",
     noStream: "Waiting for stream...",
     playing: "",
@@ -23,7 +23,7 @@ const statusMsgs = {
     errBadFormat: "Can't play this video format",
 };
 
-type StatusType = keyof typeof statusMsgs;
+type StatusType = keyof typeof defaultStatusMsgs;
 
 type QueueEntry = {
     data: Uint8Array;
@@ -41,6 +41,7 @@ class VentuzStreamPlayer extends HTMLElement {
     retryInterval = 3000;
 
     // state
+    private statusMsgs = defaultStatusMsgs;
     private ws?: WebSocket;
     private streamHeader?: StreamOut.StreamHeader;
     private frameHeader?: StreamOut.FrameHeader;
@@ -273,9 +274,14 @@ class VentuzStreamPlayer extends HTMLElement {
     }
 
     private openWS() {
-        if (!this.retryHandle) this.setStatus("connecting");
-        delete this.retryHandle;
+        if (this.retryHandle) {
+            clearTimeout(this.retryHandle);
+            delete this.retryHandle;
+        } else this.setStatus("connecting");
+
+        this.closeStream();
         this.ws?.close();
+        delete this.ws;
 
         this.ws = new WebSocket(this.url);
         this.ws.binaryType = "arraybuffer";
@@ -323,8 +329,9 @@ class VentuzStreamPlayer extends HTMLElement {
 
     setStatus(status: StatusType) {
         if (this.statusLine) {
-            this.statusLine.textContent = statusMsgs[status];
-            this.statusLine.style.visibility = status !== "playing" ? "visible" : "hidden";
+            const text = this.statusMsgs[status];
+            this.statusLine.textContent = text;
+            this.statusLine.style.visibility = text ? "visible" : "hidden";
         }
     }
 
@@ -336,6 +343,12 @@ class VentuzStreamPlayer extends HTMLElement {
 
         // randomize the max keyframe interval to avoid all clients requesting at the same time
         this.maxKfInterval = 4 + 2 * Math.random();
+
+        this.dispatchEvent(new CustomEvent("ventuz-stream-player:strings", {
+            bubbles: true,
+            cancelable: true,
+            detail: this.statusMsgs,
+        }));
     }
 
     static observedAttributes = [
@@ -642,6 +655,7 @@ class VentuzStreamPlayer extends HTMLElement {
         this.closeStream();
         this.ws?.close();
         delete this.ws;
+        this.innerHTML = "";
     }
 }
 
