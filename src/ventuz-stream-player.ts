@@ -52,6 +52,7 @@ class VentuzStreamPlayer extends HTMLElement {
     private codec?: string;
     private parseBin?: (arr: Uint8Array) => void;
     private retryHandle?: number;
+    private maxKfInterval: number;
 
     private video?: HTMLVideoElement;
     private statusLine?: HTMLDivElement;
@@ -260,7 +261,7 @@ class VentuzStreamPlayer extends HTMLElement {
                 this.lastKeyFrameIndex = this.frameHeader.frameIndex;
             } else if (
                 this.frameHeader.frameIndex - this.lastKeyFrameIndex >
-                (4 * this.streamHeader.videoFrameRateNum) / this.streamHeader.videoFrameRateDen
+                (this.maxKfInterval * this.streamHeader.videoFrameRateNum) / this.streamHeader.videoFrameRateDen
             ) {
                 logger.log("requesting IDR frame");
                 this.lastKeyFrameIndex = this.frameHeader.frameIndex;
@@ -332,6 +333,9 @@ class VentuzStreamPlayer extends HTMLElement {
 
     constructor() {
         super();
+
+        // randomize the max keyframe interval to avoid all clients requesting at the same time
+        this.maxKfInterval = 4 + 2 * Math.random();
     }
 
     static observedAttributes = [
