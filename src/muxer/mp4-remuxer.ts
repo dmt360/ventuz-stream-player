@@ -22,7 +22,7 @@ export type MP4RemuxerConfig = {
     timeBase: number;
     timeScale: number;
     onInitSegment(is: InitSegmentData): void;
-    onData(data: Uint8Array): void;
+    onData(data: Uint8Array, keyFrameTS: number | undefined): void;
 };
 
 export class MP4Remuxer {
@@ -62,6 +62,8 @@ export class MP4Remuxer {
 
         try {
             let offset = 8;
+            let hasKey = false;
+            let dts0 = inputSamples[0].dts;
 
             // concatenate the video data and construct the mdat in place
             // (need 8 more bytes to fill length and mdat type)
@@ -128,6 +130,8 @@ export class MP4Remuxer {
                     units: [],
                 });
                 lastDTS = dtsnorm;
+                if (avcSample.key)
+                    hasKey = true;
             }
             this.nextAvcDts = dtsnorm;
 
@@ -139,8 +143,8 @@ export class MP4Remuxer {
             track.samples = outputSamples;
 
             const moof = MP4.moof(track.sequenceNumber++, dtsnorm, track);
-            this.config.onData(moof);
-            this.config.onData(mdat);
+            this.config.onData(moof, undefined);
+            this.config.onData(mdat, hasKey ? track.lastKeyFrameDTS-dts0 : undefined);
         } catch (e) {
             logger.error("Error while remuxing video track", e);
         }

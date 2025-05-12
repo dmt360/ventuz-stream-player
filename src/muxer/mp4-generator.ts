@@ -35,6 +35,7 @@ export type VideoTrack = {
     width: number;
     height: number;
     sequenceNumber: number;
+    lastKeyFrameDTS: number;
 
     nbNalu: number;
 

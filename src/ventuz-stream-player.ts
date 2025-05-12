@@ -1,6 +1,6 @@
 /**
  * Ventuz Stream Player
- * A web component for playing back Ventuz Stream Out outputs in the browser, 
+ * A web component for playing back Ventuz Stream Out outputs in the browser,
  * with keyboard, mouse, and touch input support.
  * Copyright (c) 2025 Ventuz Technology, all rights reserved.
  */
@@ -25,6 +25,11 @@ const statusMsgs = {
 
 type StatusType = keyof typeof statusMsgs;
 
+type QueueEntry = {
+    data: Uint8Array;
+    keyTSOffset: number | undefined;
+};
+
 class VentuzStreamPlayer extends HTMLElement {
     // parameters
     url = "";
@@ -42,6 +47,7 @@ class VentuzStreamPlayer extends HTMLElement {
     private vidSrcBuffer?: SourceBuffer;
     private lastKeyFrameIndex = 0;
     private lastLatency = 0;
+    private lastKfTs: number | undefined = undefined;
     private codec?: string;
     private parseBin?: (arr: Uint8Array) => void;
 
@@ -50,7 +56,7 @@ class VentuzStreamPlayer extends HTMLElement {
 
     private h264Demuxer?: H264Demuxer;
     private mp4Remuxer?: MP4Remuxer;
-    private queue: Uint8Array[] = [];
+    private queue: QueueEntry[] = [];
 
     private createSrcBuffer() {
         if (this.mediaSource) {
@@ -123,15 +129,17 @@ class VentuzStreamPlayer extends HTMLElement {
 
                     this.video.onerror = (e) => {
                         logger.error("video error", e);
+                        this.closeStream();
+                        this.setStatus("errBadFormat");
                     };
                 }
 
-                this.queue.push(is.data);
+                this.queue.push({ data: is.data, keyTSOffset: undefined });
                 this.handleQueue();
             },
 
-            onData: (data) => {
-                this.queue.push(data);
+            onData: (data, keyTSOffset) => {
+                this.queue.push({ data, keyTSOffset });
                 this.handleQueue();
             },
         });
@@ -173,6 +181,8 @@ class VentuzStreamPlayer extends HTMLElement {
         delete this.streamHeader;
     }
 
+    private firstJump = true;
+
     private handleQueue() {
         if (this.queue.length > 0 && this.vidSrcBuffer && !this.vidSrcBuffer.updating) {
             // Remove old frames from the buffer
@@ -181,24 +191,36 @@ class VentuzStreamPlayer extends HTMLElement {
                 const end = this.vidSrcBuffer.buffered.end(0);
                 const currentTime = this.video?.currentTime ?? 0;
                 const bufferThreshold = 5 + this.extraLatency;
+                const frametime = this.streamHeader!.videoFrameRateDen / this.streamHeader!.videoFrameRateNum;
 
-                if (currentTime - start >= 2 * bufferThreshold) {
-                    // check if player has gotten behind and jump forwards
-                    const frametime = this.streamHeader!.videoFrameRateDen / this.streamHeader!.videoFrameRateNum;
-                    const max = end - this.lastLatency - 2 * frametime;
-                    if (max > currentTime) {
-                        logger.log("jump!", end - currentTime);
-                        this.video!.currentTime = end;
+                if (this.lastKfTs !== undefined) {
+                    var jumpTo = this.lastKfTs + frametime;
+                    if (end > jumpTo) {
+                        if (this.firstJump || jumpTo - currentTime > this.lastLatency + 2 * frametime) {
+                            console.log("jump", "ct", currentTime, "kf", this.lastKfTs, "en", end);
+                            this.video!.currentTime = jumpTo;
+                            this.lastLatency = 0;
+                        }
+
+                        this.lastKfTs = undefined;
+                        this.firstJump = false;
                     }
+                }
 
+                // remove old frames from the buffer
+                if (currentTime - start >= 2 * bufferThreshold) {
                     this.vidSrcBuffer.remove(start, currentTime - bufferThreshold);
                     return;
                 }
             }
 
-            const data = this.queue.shift()!;
-            //logger.log('dq', data.length)
-            this.vidSrcBuffer.appendBuffer(data);
+            const entry = this.queue.shift()!;
+
+            if (entry.keyTSOffset !== undefined && this.vidSrcBuffer.buffered.length) {
+                this.lastKfTs =
+                    this.vidSrcBuffer.buffered.end(0) + entry.keyTSOffset / this.streamHeader!.videoFrameRateNum;
+            }
+            this.vidSrcBuffer.appendBuffer(entry.data as BufferSource);
         }
     }
 
@@ -346,22 +368,15 @@ class VentuzStreamPlayer extends HTMLElement {
             if (this.vidSrcBuffer) {
                 // measure latency (buffered end - current play time)
                 let end = this.vidSrcBuffer.buffered.end(0);
-                this.lastLatency = end - video.currentTime;
-                logger.log("oncanplay", this.lastLatency);
-            }
-            video.play();
-        };
+                const frametime = this.streamHeader!.videoFrameRateDen / this.streamHeader!.videoFrameRateNum;
 
-        video.onplay = (_) => {
-            if (this.vidSrcBuffer) {
-                const currentTime = this.video?.currentTime ?? 0;
-                let end = this.vidSrcBuffer.buffered.end(0);
-                logger.log("onplay", currentTime, end);
-                if (end > currentTime) {
-                    logger.log("jump!", currentTime, end);
-                    video.currentTime = end;
+                const latency = Math.ceil((end - video.currentTime) / frametime) * frametime;
+                if (!this.firstJump && latency > this.lastLatency) {
+                    this.lastLatency = latency;
+                    logger.log("oncanplay", this.lastLatency);
                 }
             }
+            video.play();
         };
 
         const status = (this.statusLine = document.createElement("div"));
@@ -419,7 +434,7 @@ class VentuzStreamPlayer extends HTMLElement {
                     type: "touchBegin",
                     data: {
                         ...getIntXY(e.clientX, e.clientY),
-                        id: e.pointerId,
+                        id: Math.abs(e.pointerId) & 0xffffffff,
                     },
                 });
                 overlay.focus();
@@ -445,7 +460,7 @@ class VentuzStreamPlayer extends HTMLElement {
                     type: "touchEnd",
                     data: {
                         ...getIntXY(e.clientX, e.clientY),
-                        id: e.pointerId,
+                        id: Math.abs(e.pointerId) & 0xffffffff,
                     },
                 });
                 e.stopPropagation();
@@ -471,7 +486,7 @@ class VentuzStreamPlayer extends HTMLElement {
                     type: "touchMove",
                     data: {
                         ...getIntXY(e.clientX, e.clientY),
-                        id: e.pointerId,
+                        id: Math.abs(e.pointerId) & 0xffffffff,
                     },
                 });
                 e.stopPropagation();
@@ -491,7 +506,7 @@ class VentuzStreamPlayer extends HTMLElement {
                     type: "touchCancel",
                     data: {
                         ...getIntXY(e.clientX, e.clientY),
-                        id: e.pointerId,
+                        id: Math.abs(e.pointerId) & 0xffffffff,
                     },
                 });
                 e.stopPropagation();
@@ -512,7 +527,7 @@ class VentuzStreamPlayer extends HTMLElement {
                     type: "touchCancel",
                     data: {
                         ...getIntXY(e.clientX, e.clientY),
-                        id: e.pointerId,
+                        id: Math.abs(e.pointerId) & 0xffffffff,
                     },
                 });
                 e.stopPropagation();

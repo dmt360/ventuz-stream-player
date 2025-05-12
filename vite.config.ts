@@ -4,6 +4,7 @@ import cssInjectedByJsPlugin from "vite-plugin-css-injected-by-js";
 export default {
     server: {
         port: 22444,
+        host: true,
     },
 
     plugins: [cssInjectedByJsPlugin()],

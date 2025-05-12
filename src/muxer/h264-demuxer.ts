@@ -37,6 +37,7 @@ export class H264Demuxer {
             duration: 0,
             width: 0,
             height: 0,
+            lastKeyFrameDTS: -1,
         };
         //this.firefox = navigator.userAgent.toLowerCase().indexOf("firefox") !== -1;
     }
@@ -115,17 +116,20 @@ export class H264Demuxer {
         }
 
         if (units2.length) {
-            const tss = this.timestamp;
             samples.push({
                 units: [...units2],
-                pts: tss,
-                dts: tss,
+                pts: this.timestamp,
+                dts: this.timestamp,
                 key: key,
                 cts: 0,
                 duration: 0,
                 flags: { dependsOn: 0, isNonSync: 0 },
                 size: length,
             });
+
+            if (key)
+                track.lastKeyFrameDTS = this.timestamp;
+
             track.len += length;
             track.nbNalu += units2.length;
             if (frame) {
@@ -133,7 +137,7 @@ export class H264Demuxer {
             }
         }
         //if (this.firefox || track.samples.length >= 2) {
-        if (track.samples.length >= this.config.fragSize) {
+        if (track.samples.length >= Math.max(1, this.config.fragSize)) {
             this.config.onData(this._avcTrack);
         }
     }
