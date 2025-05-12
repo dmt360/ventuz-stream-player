@@ -17,7 +17,7 @@ const statusMsgs = {
     noStream: "Waiting for stream...",
     playing: "",
 
-    errNoRuntime: "Couldn't connect to VMS",
+    errNoRuntime: "Couldn't connect",
     errClosed: "Connection lost",
     errGeneric: "Error",
     errBadFormat: "Can't play this video format",
@@ -38,6 +38,7 @@ class VentuzStreamPlayer extends HTMLElement {
     useMouse = true;
     useTouch = true;
     fullscreenButton = false;
+    retryInterval = 3000;
 
     // state
     private ws?: WebSocket;
@@ -50,6 +51,7 @@ class VentuzStreamPlayer extends HTMLElement {
     private lastKfTs: number | undefined = undefined;
     private codec?: string;
     private parseBin?: (arr: Uint8Array) => void;
+    private retryHandle?: number;
 
     private video?: HTMLVideoElement;
     private statusLine?: HTMLDivElement;
@@ -270,9 +272,10 @@ class VentuzStreamPlayer extends HTMLElement {
     }
 
     private openWS() {
+        if (!this.retryHandle) this.setStatus("connecting");
+        delete this.retryHandle;
         this.ws?.close();
 
-        this.setStatus("connecting");
         this.ws = new WebSocket(this.url);
         this.ws.binaryType = "arraybuffer";
 
@@ -286,14 +289,17 @@ class VentuzStreamPlayer extends HTMLElement {
             if (this.ws) {
                 this.setStatus("errClosed");
                 this.closeStream();
+                delete this.ws;
+                if (this.retryInterval) this.retryHandle = setTimeout(() => this.openWS(), this.retryInterval);
             }
-            delete this.ws;
         };
 
         this.ws.onerror = (ev) => {
             logger.log("WS error", ev);
             this.setStatus("errNoRuntime");
+            this.closeStream();
             delete this.ws;
+            if (this.retryInterval) this.retryHandle = setTimeout(() => this.openWS(), this.retryInterval);
         };
 
         this.ws.onmessage = (ev) => {
@@ -317,6 +323,7 @@ class VentuzStreamPlayer extends HTMLElement {
     setStatus(status: StatusType) {
         if (this.statusLine) {
             this.statusLine.textContent = statusMsgs[status];
+            this.statusLine.style.visibility = status !== "playing" ? "visible" : "hidden";
         }
     }
 
@@ -327,7 +334,16 @@ class VentuzStreamPlayer extends HTMLElement {
         super();
     }
 
-    static observedAttributes = ["url", "latency", "noinput", "nokeyboard", "nomouse", "notouch", "fullscreenbutton"];
+    static observedAttributes = [
+        "url",
+        "latency",
+        "noinput",
+        "nokeyboard",
+        "nomouse",
+        "notouch",
+        "fullscreenbutton",
+        "retryinterval",
+    ];
 
     attributeChangedCallback(name: string, oldValue: string | null, newValue: string | null) {
         switch (name) {
@@ -353,6 +369,9 @@ class VentuzStreamPlayer extends HTMLElement {
                 break;
             case "fullscreenbutton":
                 this.fullscreenButton = newValue !== null;
+                break;
+            case "retryinterval":
+                this.retryInterval = 1000 * Math.max(0, parseInt(newValue ?? "0") || 0);
                 break;
         }
     }
@@ -612,6 +631,10 @@ class VentuzStreamPlayer extends HTMLElement {
 
     disconnectedCallback() {
         logger.log("disconnected");
+        if (this.retryHandle) {
+            clearTimeout(this.retryHandle);
+            delete this.retryHandle;
+        }
         this.closeStream();
         this.ws?.close();
         delete this.ws;

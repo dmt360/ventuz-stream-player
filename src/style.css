@@ -38,6 +38,11 @@ ventuz-stream-player .vsp-statusdisplay {
         "Open Sans", "Helvetica Neue", sans-serif;
     color: white;
     text-shadow: 2px 2px 2px rgba(0, 0, 0, 1);
+    background-color: #0004;
+    border: 0.5em solid #0000;
+    border-radius: 1em;;
+    min-width: 20em;
+    text-align: center;
 }
 
 ventuz-stream-player .vsp-fsbutton {
