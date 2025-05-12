@@ -30,6 +30,10 @@ type QueueEntry = {
     keyTSOffset: number | undefined;
 };
 
+declare global {
+    var overrideVSPStrings: ((strings: typeof defaultStatusMsgs) => void) | undefined;
+}
+
 class VentuzStreamPlayer extends HTMLElement {
     // parameters
     url = "";
@@ -201,7 +205,7 @@ class VentuzStreamPlayer extends HTMLElement {
                     var jumpTo = this.lastKfTs + frametime;
                     if (end > jumpTo) {
                         if (this.firstJump || jumpTo - currentTime > this.lastLatency + 2 * frametime) {
-                            console.log("jump", "ct", currentTime, "kf", this.lastKfTs, "en", end);
+                            logger.log("jump", "ct", currentTime, "kf", this.lastKfTs, "en", end);
                             this.video!.currentTime = jumpTo;
                             this.lastLatency = 0;
                         }
@@ -344,9 +348,12 @@ class VentuzStreamPlayer extends HTMLElement {
         // randomize the max keyframe interval to avoid all clients requesting at the same time
         this.maxKfInterval = 4 + 2 * Math.random();
 
+        if (window.overrideVSPStrings)
+            window.overrideVSPStrings(this.statusMsgs);
+
         this.dispatchEvent(new CustomEvent("ventuz-stream-player:strings", {
             bubbles: true,
-            cancelable: true,
+            cancelable: false,
             detail: this.statusMsgs,
         }));
     }
@@ -451,7 +458,7 @@ class VentuzStreamPlayer extends HTMLElement {
         };
 
         overlay.onpointerdown = (e) => {
-            //console.log("pointerdown", e.pointerType, e.pointerId);
+            //logger.log("pointerdown", e.pointerType, e.pointerId);
 
             if (e.pointerType === "mouse") {
                 if (!this.useMouse) return;
@@ -480,7 +487,7 @@ class VentuzStreamPlayer extends HTMLElement {
         };
 
         overlay.onpointerup = (e) => {
-            //console.log("pointerup", e.pointerType, e.pointerId);
+            //logger.log("pointerup", e.pointerType, e.pointerId);
             if (e.pointerType === "mouse") {
                 if (!this.useMouse) return;
                 // turns out JS and the stream device use the same order of buttons, so no mapping necessary here
@@ -505,7 +512,7 @@ class VentuzStreamPlayer extends HTMLElement {
         };
 
         overlay.onpointermove = (e) => {
-            //console.log("pointermove", e.pointerType, e.pointerId);
+            //logger.log("pointermove", e.pointerType, e.pointerId);
             if (e.pointerType === "mouse") {
                 if (!this.useMouse) return;
                 this.sendCommand({
