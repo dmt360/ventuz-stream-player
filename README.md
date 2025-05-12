@@ -33,6 +33,7 @@ ventuz-stream-player supports the following HTML attributes:
 - __latency__: Minimum playback latency in seconds. The default is zero, increasing it trades latency for playback stability.
 - __noinput__/__nokeyboard__/__nomouse__/__notouch__: Disable all / keyboard / mouse / touch input
 - __fullscreenbutton__: Display a button to enter fullscreen
+- __retryinterval__: Connection retry delay in seconds. Default is 3, 0 means don't retry
 
 #### Styling
 
