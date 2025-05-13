@@ -1,9 +1,9 @@
 /**
  * Generate MP4 Box
- * 
+ *
  * Originally from https://github.com/dailymotion/hls.js
- * Copyright (c) 2017 Dailymotion, licensed under the Apache License, Version 2.0 
- * 
+ * Copyright (c) 2017 Dailymotion, licensed under the Apache License, Version 2.0
+ *
  * Typescript conversion and modifications by Tammo Hinrichs
  */
 
@@ -42,49 +42,52 @@ export type VideoTrack = {
     samples: VideoSample[];
 
     codec: string;
-    sps?: Uint8Array[];
-    pps?: Uint8Array[];
-    vps?: Uint8Array[];
+    sps?: Uint8Array;
+    pps?: Uint8Array;
+    vps?: Uint8Array;
 };
 
-export const types: { [k: string]: number[] } = {
-    avc1: [], // codingname
-    avcC: [],
-    btrt: [],
-    dinf: [],
-    dref: [],
-    esds: [],
-    ftyp: [],
-    hdlr: [],
-    mdat: [],
-    mdhd: [],
-    mdia: [],
-    mfhd: [],
-    minf: [],
-    moof: [],
-    moov: [],
-    mp4a: [],
-    mvex: [],
-    mvhd: [],
-    sdtp: [],
-    stbl: [],
-    stco: [],
-    stsc: [],
-    stsd: [],
-    stsz: [],
-    stts: [],
-    tfdt: [],
-    tfhd: [],
-    traf: [],
-    trak: [],
-    trun: [],
-    trex: [],
-    tkhd: [],
-    vmhd: [],
-    smhd: [],
-};
+const fcCache: { [key: string]: number[] } = {};
 
-const HDLR_video = new Uint8Array([
+export function fourcc(i: string) {
+    return (
+        fcCache[i] ||
+        (fcCache[i] = [i.charCodeAt(0), i.charCodeAt(1), i.charCodeAt(2), i.charCodeAt(3)])
+    );
+}
+
+function u16(i: number) {
+    return [(i >>> 8) & 0xff, i & 0xff];
+}
+
+function u32(i: number) {
+    return [(i >>> 24) & 0xff, (i >>> 16) & 0xff, (i >>> 8) & 0xff, i & 0xff];
+}
+
+const DREF = box("dref", [[
+    0x00, // version 0
+    0x00,
+    0x00,
+    0x00, // flags
+    0x00,
+    0x00,
+    0x00,
+    0x01, // entry_count
+    0x00,
+    0x00,
+    0x00,
+    0x0c, // entry_size
+    0x75,
+    0x72,
+    0x6c,
+    0x20, // 'url' type
+    0x00, // version 0
+    0x00,
+    0x00,
+    0x01, // entry_flags
+]]);
+
+const HDLR_video = [
     0x00, // version 0
     0x00,
     0x00,
@@ -122,9 +125,9 @@ const HDLR_video = new Uint8Array([
     0x65,
     0x72,
     0x00, // name: 'VideoHandler'
-]);
+];
 
-const STTS = new Uint8Array([
+const STTS = [
     0x00, // version
     0x00,
     0x00,
@@ -133,9 +136,9 @@ const STTS = new Uint8Array([
     0x00,
     0x00,
     0x00, // entry_count
-]);
+];
 
-const STSC = new Uint8Array([
+const STSC = [
     0x00, // version
     0x00,
     0x00,
@@ -144,9 +147,9 @@ const STSC = new Uint8Array([
     0x00,
     0x00,
     0x00, // entry_count
-]);
+];
 
-const STCO = new Uint8Array([
+const STCO = [
     0x00, // version
     0x00,
     0x00,
@@ -155,9 +158,9 @@ const STCO = new Uint8Array([
     0x00,
     0x00,
     0x00, // entry_count
-]);
+];
 
-const STSZ = new Uint8Array([
+const STSZ = [
     0x00, // version
     0x00,
     0x00,
@@ -170,9 +173,9 @@ const STSZ = new Uint8Array([
     0x00,
     0x00,
     0x00, // sample_count
-]);
+];
 
-const VMHD = new Uint8Array([
+const VMHD = [
     0x00, // version
     0x00,
     0x00,
@@ -185,9 +188,9 @@ const VMHD = new Uint8Array([
     0x00,
     0x00,
     0x00, // opcolor
-]);
+];
 
-const STSD = new Uint8Array([
+const STSD = [
     0x00, // version 0
     0x00,
     0x00,
@@ -196,78 +199,31 @@ const STSD = new Uint8Array([
     0x00,
     0x00,
     0x01,
-]); // entry_count
+]; // entry_count
 
-let FTYP: Uint8Array;
-let DINF: Uint8Array;
-
-export function init() {
-    for (const i in types) {
-        if (types.hasOwnProperty(i)) {
-            types[i] = [i.charCodeAt(0), i.charCodeAt(1), i.charCodeAt(2), i.charCodeAt(3)];
-        }
-    }
-
-    const dref = new Uint8Array([
-        0x00, // version 0
-        0x00,
-        0x00,
-        0x00, // flags
-        0x00,
-        0x00,
-        0x00,
-        0x01, // entry_count
-        0x00,
-        0x00,
-        0x00,
-        0x0c, // entry_size
-        0x75,
-        0x72,
-        0x6c,
-        0x20, // 'url' type
-        0x00, // version 0
-        0x00,
-        0x00,
-        0x01, // entry_flags
-    ]);
-
-    const majorBrand = new Uint8Array([105, 115, 111, 109]); // isom
-    const avc1Brand = new Uint8Array([97, 118, 99, 49]); // avc1
-    const minorVersion = new Uint8Array([0, 0, 0, 1]);
-
-    FTYP = box(types.ftyp, [majorBrand, minorVersion, majorBrand, avc1Brand]);
-    DINF = box(types.dinf, [box(types.dref, [dref])]);
-}
-
-export function box(type: number[], args: Uint8Array[] = []) {
-    let size = args.reduce((acc, arg) => acc + arg.byteLength, 8); // 8 bytes for the box header
+function box(type: string, args: ArrayLike<number>[] = []) {
+    let size = args.reduce((acc, arg) => acc + arg.length, 8); // 8 bytes for the box header
     const result = new Uint8Array(size);
-    result[0] = (size >> 24) & 0xff;
-    result[1] = (size >> 16) & 0xff;
-    result[2] = (size >> 8) & 0xff;
-    result[3] = size & 0xff;
-    result.set(type, 4);
+    
+    result.set(u32(size), 0);
+    result.set(fourcc(type), 4);
     // copy the payload into the result
     for (let i = 0, size = 8; i < args.length; i++) {
         // copy payload[i] array @ offset size
         result.set(args[i], size);
-        size += args[i].byteLength;
+        size += args[i].length;
     }
     return result;
 }
 
-export function hdlr() {
-    return box(types.hdlr, [HDLR_video]);
+function hdlr() {
+    return box("hdlr", [HDLR_video]);
 }
 
-export function mdat(data: Uint8Array) {
-    return box(types.mdat, [data]);
-}
-
-export function mdhd(timescale: number, duration: number) {
+function mdhd(timescale: number, duration: number) {
     duration *= timescale;
-    return box(types.mdhd, [
-        new Uint8Array([
+    return box("mdhd", [
+        [
             0x00, // version 0
             0x00,
             0x00,
@@ -280,60 +236,52 @@ export function mdhd(timescale: number, duration: number) {
             0x00,
             0x00,
             0x03, // modification_time
-            (timescale >> 24) & 0xff,
-            (timescale >> 16) & 0xff,
-            (timescale >> 8) & 0xff,
-            timescale & 0xff, // timescale
-            duration >> 24,
-            (duration >> 16) & 0xff,
-            (duration >> 8) & 0xff,
-            duration & 0xff, // duration
+            ...u32(timescale), // timescale
+            ...u32(duration), // duration
             0x55,
             0xc4, // 'und' language (undetermined)
             0x00,
             0x00,
-        ]),
+        ],
     ]);
 }
 
-export function mdia(track: VideoTrack) {
-    return box(types.mdia, [mdhd(track.timescale, track.duration), hdlr(), minf(track)]);
+function mdia(track: VideoTrack) {
+    return box("mdia", [mdhd(track.timescale, track.duration), hdlr(), minf(track)]);
 }
 
-export function mfhd(sequenceNumber: number) {
-    return box(types.mfhd, [
-        new Uint8Array([
+function mfhd(sequenceNumber: number) {
+    return box("mfhd", [
+        [
             0x00,
             0x00,
             0x00,
             0x00, // flags
-            sequenceNumber >> 24,
-            (sequenceNumber >> 16) & 0xff,
-            (sequenceNumber >> 8) & 0xff,
-            sequenceNumber & 0xff, // sequence_number
-        ]),
+            ...u32(sequenceNumber), // sequence_number
+        ],
     ]);
 }
 
-export function minf(track: VideoTrack) {
-    return box(types.minf, [box(types.vmhd, [VMHD]), DINF, stbl(track)]);
+function minf(track: VideoTrack) {
+    var dinf = box("dinf", [DREF]);
+    return box("minf", [box("vmhd", [VMHD]), dinf, stbl(track)]);
 }
 
 export function moof(sn: number, baseMediaDecodeTime: number, track: VideoTrack) {
-    return box(types.moof, [mfhd(sn), traf(track, baseMediaDecodeTime)]);
+    return box("moof", [mfhd(sn), traf(track, baseMediaDecodeTime)]);
 }
 
-export function moov(tracks: VideoTrack[]) {
-    return box(types.moov, [mvhd(tracks[0].timescale, tracks[0].duration), ...tracks.map(trak), mvex(tracks)]);
+function moov(track: VideoTrack) {
+    return box("moov", [mvhd(track.timescale, track.duration), trak(track), mvex(track)]);
 }
 
-export function mvex(tracks: VideoTrack[]) {
-    return box(types.mvex, tracks.map(trex));
+function mvex(track: VideoTrack) {
+    return box("mvex", [trex(track)]);
 }
 
-export function mvhd(timescale: number, duration: number) {
+function mvhd(timescale: number, duration: number) {
     duration *= timescale;
-    const bytes = new Uint8Array([
+    const bytes = [
         0x00, // version 0
         0x00,
         0x00,
@@ -346,14 +294,8 @@ export function mvhd(timescale: number, duration: number) {
         0x00,
         0x00,
         0x02, // modification_time
-        (timescale >> 24) & 0xff,
-        (timescale >> 16) & 0xff,
-        (timescale >> 8) & 0xff,
-        timescale & 0xff, // timescale
-        (duration >> 24) & 0xff,
-        (duration >> 16) & 0xff,
-        (duration >> 8) & 0xff,
-        duration & 0xff, // duration
+        ...u32(timescale), // timescale
+        ...u32(duration), // duration
         0x00,
         0x01,
         0x00,
@@ -434,11 +376,11 @@ export function mvhd(timescale: number, duration: number) {
         0xff,
         0xff,
         0xff, // next_track_ID
-    ]);
-    return box(types.mvhd, [bytes]);
+    ];
+    return box("mvhd", [bytes]);
 }
 
-export function sdtp(track: VideoTrack) {
+function sdtp(track: VideoTrack) {
     const samples = track.samples,
         bytes = new Uint8Array(4 + samples.length);
 
@@ -449,172 +391,167 @@ export function sdtp(track: VideoTrack) {
         bytes[i + 4] = flags.dependsOn << 4;
     }
 
-    return box(types.sdtp, [bytes]);
+    return box("sdtp", [bytes]);
 }
 
-export function stbl(track: VideoTrack) {
-    return box(types.stbl, [
+function stbl(track: VideoTrack) {
+    return box("stbl", [
         stsd(track),
-        box(types.stts, [STTS]),
-        box(types.stsc, [STSC]),
-        box(types.stsz, [STSZ]),
-        box(types.stco, [STCO]),
+        box("stts", [STTS]),
+        box("stsc", [STSC]),
+        box("stsz", [STSZ]),
+        box("stco", [STCO]),
     ]);
 }
 
-export function avc1(track: VideoTrack) {
-    let sps: number[] = [],
-        pps: number[] = [];
+function videoSample(track: VideoTrack) {
+    return [
+        0x00,
+        0x00,
+        0x00, // reserved
+        0x00,
+        0x00,
+        0x00, // reserved
+        0x00,
+        0x01, // data_reference_index
+        0x00,
+        0x00, // pre_defined
+        0x00,
+        0x00, // reserved
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x00, // pre_defined
+        ...u16(track.width), // width
+        ...u16(track.height), // height
+        0x00,
+        0x48,
+        0x00,
+        0x00, // horizresolution
+        0x00,
+        0x48,
+        0x00,
+        0x00, // vertresolution
+        0x00,
+        0x00,
+        0x00,
+        0x00, // reserved
+        0x00,
+        0x01, // frame_count
+        0x12,
+        0x6a,
+        0x65,
+        0x66,
+        0x66, // wfs.js
+        0x2d,
+        0x79,
+        0x61,
+        0x6e,
+        0x2f,
+        0x2f,
+        0x2f,
+        0x67,
+        0x77,
+        0x66,
+        0x73,
+        0x2e,
+        0x6a,
+        0x73,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x00, // compressorname
+        0x00,
+        0x18, // depth = 24
+        0x11,
+        0x11,
+    ]; // pre_defined = -1
+}
 
-    // assemble the SPSs
+function avc1(track: VideoTrack) {
+    const sps = track.sps!;
+    const pps = track.pps!;
 
-    for (let i = 0; i < track.sps!.length; i++) {
-        const data = track.sps![i];
-        const len = data.byteLength;
-        sps = [...sps, (len >>> 8) & 0xff, len & 0xff, ...data];
-    }
-
-    // assemble the PPSs
-    for (let i = 0; i < track.pps!.length; i++) {
-        const data = track.pps![i];
-        const len = data.byteLength;
-        pps = [...pps, (len >>> 8) & 0xff, len & 0xff, ...data];
-    }
-
-    const avcc = box(types.avcC, [
-            new Uint8Array([
-                0x01, // version
-                sps[3], // profile
-                sps[4], // profile compat
-                sps[5], // level
-                0xfc | 3, // lengthSizeMinusOne, hard-coded to 4 bytes
-                0xe0 | track.sps!.length, // 3bit reserved (111) + numOfSequenceParameterSets
-                ...sps,
-                track.pps!.length,
-                ...pps,
-            ]),
-        ]), // "PPS"
-        width = track.width,
-        height = track.height;
-    //console.log('avcc:' + Hex.hexDump(avcc));
-    return box(
-        types.avc1,
+    const avcc = box("avcC", [
         [
-            new Uint8Array([
-                0x00,
-                0x00,
-                0x00, // reserved
-                0x00,
-                0x00,
-                0x00, // reserved
-                0x00,
-                0x01, // data_reference_index
-                0x00,
-                0x00, // pre_defined
-                0x00,
-                0x00, // reserved
-                0x00,
-                0x00,
-                0x00,
-                0x00,
-                0x00,
-                0x00,
-                0x00,
-                0x00,
-                0x00,
-                0x00,
-                0x00,
-                0x00, // pre_defined
-                (width >> 8) & 0xff,
-                width & 0xff, // width
-                (height >> 8) & 0xff,
-                height & 0xff, // height
-                0x00,
-                0x48,
-                0x00,
-                0x00, // horizresolution
-                0x00,
-                0x48,
-                0x00,
-                0x00, // vertresolution
-                0x00,
-                0x00,
-                0x00,
-                0x00, // reserved
-                0x00,
-                0x01, // frame_count
-                0x12,
-                0x6a,
-                0x65,
-                0x66,
-                0x66, // wfs.js
-                0x2d,
-                0x79,
-                0x61,
-                0x6e,
-                0x2f,
-                0x2f,
-                0x2f,
-                0x67,
-                0x77,
-                0x66,
-                0x73,
-                0x2e,
-                0x6a,
-                0x73,
-                0x00,
-                0x00,
-                0x00,
-                0x00,
-                0x00,
-                0x00,
-                0x00,
-                0x00,
-                0x00,
-                0x00,
-                0x00,
-                0x00,
-                0x00, // compressorname
-                0x00,
-                0x18, // depth = 24
-                0x11,
-                0x11,
-            ]), // pre_defined = -1
-            avcc,
-            box(types.btrt, [
-                new Uint8Array([
-                    0x00,
-                    0x1c,
-                    0x9c,
-                    0x80, // bufferSizeDB
-                    0x00,
-                    0x2d,
-                    0xc6,
-                    0xc0, // maxBitrate
-                    0x00,
-                    0x2d,
-                    0xc6,
-                    0xc0,
-                ]),
-            ]),
-        ] // avgBitrate
+            0x01, // version
+            sps[1], // profile
+            sps[2], // profile compat
+            sps[3], // level
+            0xfc | 3, // lengthSizeMinusOne, hard-coded to 4 bytes
+            0xe0 | 1, // 3bit reserved (111) + numOfSequenceParameterSets
+            ...u16(sps.length), // length of SPS
+            ...sps,
+            1, // numOfPictureParameterSets
+            ...u16(pps.length), // length of PPS
+            ...pps,
+        ],
+    ]); // "PPS"
+
+    //console.log('avcc:' + Hex.hexDump(avcc));
+    return box("avc1", [videoSample(track), avcc]);
+}
+
+function hev1(track: VideoTrack) {
+    let sps: number[] = [],
+        pps: number[] = [],
+        vps: number[] = [];
+
+   
+    const hvcc = box("hvcC", [
+        [
+            0x01, // version
+            sps[3], // profile
+            sps[4], // profile compat
+            sps[5], // level
+            0xfc | 3, // lengthSizeMinusOne, hard-coded to 4 bytes
+            0xe0 | track.sps!.length, // 3bit reserved (111) + numOfSequenceParameterSets
+            ...sps,
+            track.pps!.length,
+            ...pps,
+        ],
+    ]);
+
+    return box(
+        "hev1",
+        [
+            videoSample(track),
+            hvcc,           
+        ] 
     );
 }
 
-export function stsd(track: VideoTrack) {
-    return box(types.stsd, [STSD, avc1(track)]);
+function stsd(track: VideoTrack) {
+    if (track.codec === "avc1") return box("stsd", [STSD, avc1(track)]);
+    else if (track.codec === "hev1") return box("stsd", [STSD, hev1(track)]);
+    else throw new Error("Unsupported codec: " + track.codec);
 }
 
-export function tkhd(track: VideoTrack) {
+function tkhd(track: VideoTrack) {
     const id = track.id,
         duration = track.duration * track.timescale,
         width = track.width,
         height = track.height;
 
-    //   console.log( "tkhd==> ",track.id, track.duration, track.timescale, width,height );
-
-    return box(types.tkhd, [
-        new Uint8Array([
+    return box("tkhd", [
+        [
             0x00, // version 0
             0x00,
             0x00,
@@ -627,18 +564,12 @@ export function tkhd(track: VideoTrack) {
             0x00,
             0x00,
             0x00, // modification_time
-            (id >> 24) & 0xff,
-            (id >> 16) & 0xff,
-            (id >> 8) & 0xff,
-            id & 0xff, // track_ID
+            ...u32(id), // track_ID
             0x00,
             0x00,
             0x00,
             0x00, // reserved
-            duration >> 24,
-            (duration >> 16) & 0xff,
-            (duration >> 8) & 0xff,
-            duration & 0xff, // duration
+            ...u32(duration), // duration
             0x00,
             0x00,
             0x00,
@@ -691,48 +622,40 @@ export function tkhd(track: VideoTrack) {
             0x00,
             0x00,
             0x00, // transformation: unity matrix
-            (width >> 8) & 0xff,
-            width & 0xff,
+            ...u16(width), // width
             0x00,
             0x00, // width
-            (height >> 8) & 0xff,
-            height & 0xff,
+            ...u16(height), // height
             0x00,
             0x00, // height
-        ]),
+        ],
     ]);
 }
 
-export function traf(track: VideoTrack, baseMediaDecodeTime: number) {
+function traf(track: VideoTrack, baseMediaDecodeTime: number) {
     const sampleDependencyTable = sdtp(track),
         id = track.id;
 
     //  console.log( "traf==> ",id ,baseMediaDecodeTime);
 
-    return box(types.traf, [
-        box(types.tfhd, [
-            new Uint8Array([
+    return box("traf", [
+        box("tfhd", [
+            [
                 0x00, // version 0
                 0x00,
                 0x00,
                 0x00, // flags
-                id >> 24,
-                (id >> 16) & 0xff,
-                (id >> 8) & 0xff,
-                id & 0xff, // track_ID
-            ]),
+                ...u32(id), // track_ID
+            ],
         ]),
-        box(types.tfdt, [
-            new Uint8Array([
+        box("tfdt", [
+            [
                 0x00, // version 0
                 0x00,
                 0x00,
                 0x00, // flags
-                baseMediaDecodeTime >> 24,
-                (baseMediaDecodeTime >> 16) & 0xff,
-                (baseMediaDecodeTime >> 8) & 0xff,
-                baseMediaDecodeTime & 0xff, // baseMediaDecodeTime
-            ]),
+                ...u32(baseMediaDecodeTime), // baseMediaDecodeTime
+            ],
         ]),
         trun(
             track,
@@ -748,28 +671,20 @@ export function traf(track: VideoTrack, baseMediaDecodeTime: number) {
     ]);
 }
 
-/**
- * Generate a track box.
- * @param track {object} a track definition
- * @return {Uint8Array} the track box
- */
-export function trak(track: VideoTrack) {
+function trak(track: VideoTrack) {
     track.duration = track.duration || 0xffffffff;
-    return box(types.trak, [tkhd(track), mdia(track)]);
+    return box("trak", [tkhd(track), mdia(track)]);
 }
 
-export function trex(track: VideoTrack) {
+function trex(track: VideoTrack) {
     const id = track.id;
-    return box(types.trex, [
-        new Uint8Array([
+    return box("trex", [
+        [
             0x00, // version 0
             0x00,
             0x00,
             0x00, // flags
-            id >> 24,
-            (id >> 16) & 0xff,
-            (id >> 8) & 0xff,
-            id & 0xff, // track_ID
+            ...u32(id), // track_ID
             0x00,
             0x00,
             0x00,
@@ -786,11 +701,11 @@ export function trex(track: VideoTrack) {
             0x01,
             0x00,
             0x01, // default_sample_flags
-        ]),
+        ],
     ]);
 }
 
-export function trun(track: VideoTrack, offset: number) {
+function trun(track: VideoTrack, offset: number) {
     const samples = track.samples || [],
         len = samples.length,
         arraylen = 12 + 16 * len,
@@ -806,14 +721,8 @@ export function trun(track: VideoTrack, offset: number) {
             0x00,
             0x0f,
             0x01, // flags
-            (len >>> 24) & 0xff,
-            (len >>> 16) & 0xff,
-            (len >>> 8) & 0xff,
-            len & 0xff, // sample_count
-            (offset >>> 24) & 0xff,
-            (offset >>> 16) & 0xff,
-            (offset >>> 8) & 0xff,
-            offset & 0xff, // data_offset
+            ...u32(len), // sample_count
+            ...u32(offset), // data_offset
         ],
         0
     );
@@ -825,37 +734,29 @@ export function trun(track: VideoTrack, offset: number) {
         const cts = sample.cts;
         array.set(
             [
-                (duration >>> 24) & 0xff,
-                (duration >>> 16) & 0xff,
-                (duration >>> 8) & 0xff,
-                duration & 0xff, // sample_duration
-                (size >>> 24) & 0xff,
-                (size >>> 16) & 0xff,
-                (size >>> 8) & 0xff,
-                size & 0xff, // sample_size
+                ...u32(duration), // sample_duration
+                ...u32(size), // sample_size
                 flags.dependsOn,
                 flags.isNonSync,
                 0,
                 0,
-                (cts >>> 24) & 0xff,
-                (cts >>> 16) & 0xff,
-                (cts >>> 8) & 0xff,
-                cts & 0xff, // sample_composition_time_offset
+                ...u32(cts), // sample_composition_time_offset
             ],
             12 + 16 * i
         );
     }
-    return box(types.trun, [array]);
+    return box("trun", [array]);
 }
 
-export function initSegment(tracks: VideoTrack[]) {
-    if (!types[0]) {
-        init();
-    }
-    const movie = moov(tracks);
+export function initSegment(track: VideoTrack) {
+    const movie = moov(track);
 
-    const result = new Uint8Array(FTYP.byteLength + movie.byteLength);
-    result.set(FTYP);
-    result.set(movie, FTYP.byteLength);
+    const majorBrand = fourcc("isom");
+    const minorVersion = u32(1);
+    const ftyp = box("ftyp", [majorBrand, minorVersion, majorBrand, fourcc(track.codec)]);
+
+    const result = new Uint8Array(ftyp.byteLength + movie.byteLength);
+    result.set(ftyp);
+    result.set(movie, ftyp.byteLength);
     return result;
 }

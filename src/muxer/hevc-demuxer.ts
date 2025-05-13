@@ -52,7 +52,7 @@ export class HEVCDemuxer {
                     if (debug)
                         debugString += "VPS ";
                     if (!track.vps) {
-                        track.vps = [unit.data];
+                        track.vps = unit.data;
                         // push = true;
                     }
                     break;
@@ -62,7 +62,7 @@ export class HEVCDemuxer {
                     if (!track.sps) {                    
                         track.width = this.config.width;
                         track.height = this.config.height;
-                        track.sps = [unit.data];
+                        track.sps = unit.data;
                         track.duration = 0;
 
                         const sps = this.decodeRBSP(unit.data);
@@ -76,7 +76,7 @@ export class HEVCDemuxer {
                     if (debug)
                         debugString += "PPS ";
                     if (!track.pps) {
-                        track.pps = [unit.data];
+                        track.pps = unit.data;
                         push = true;
                     }
                     break;

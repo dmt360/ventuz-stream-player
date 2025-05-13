@@ -70,7 +70,7 @@ export class MP4Remuxer {
             const mdat = new Uint8Array(track.len + 4 * track.nbNalu + 8);
             let view = new DataView(mdat.buffer);
             view.setUint32(0, mdat.byteLength);
-            mdat.set(MP4.types.mdat, 4);
+            mdat.set(MP4.fourcc("mdat"), 4);
             let ptsnorm: number,
                 dtsnorm = 0,
                 lastDTS: number | undefined;
@@ -163,7 +163,7 @@ export class MP4Remuxer {
         if (videoTrack.sps && videoTrack.pps && videoSamples.length) {
             videoTrack.timescale = this.config.timeScale; //this.MP4_TIMESCALE;
             initseg = {
-                data: MP4.initSegment([videoTrack]),
+                data: MP4.initSegment(videoTrack),
                 metadata: {
                     width: videoTrack.width,
                     height: videoTrack.height,
