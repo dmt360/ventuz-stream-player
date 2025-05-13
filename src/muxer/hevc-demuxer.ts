@@ -30,8 +30,8 @@ export class HEVCDemuxer {
             width: 0,
             height: 0,
             lastKeyFrameDTS: -1,
+            codec: "hev1",
         };
-        //this.firefox = navigator.userAgent.toLowerCase().indexOf("firefox") !== -1;
     }
 
     pushData(array: Uint8Array) {
@@ -49,22 +49,41 @@ export class HEVCDemuxer {
             let push = false;
             switch (unit.type) {
                 case 32: // VPS
-                    const vps = this.decodeRBSP(unit.data);
-
-                    //push = true;
+                    if (debug)
+                        debugString += "VPS ";
+                    if (!track.vps) {
+                        track.vps = [unit.data];
+                        // push = true;
+                    }
                     break;
                 case 33: // SPS
-                    const sps = this.decodeRBSP(unit.data);
+                    if (debug)
+                        debugString += "SPS ";
+                    if (!track.sps) {                    
+                        track.width = this.config.width;
+                        track.height = this.config.height;
+                        track.sps = [unit.data];
+                        track.duration = 0;
 
-                    //push = true;
+                        const sps = this.decodeRBSP(unit.data);
+
+                        const codecstring = this.getCodecString(sps);
+                        this.config.onBufferReset(codecstring);
+                        push = true;
+                    }
                     break;
                 case 34: // PPS
-                    const pps = this.decodeRBSP(unit.data);
-                    
-                    //push = true;
+                    if (debug)
+                        debugString += "PPS ";
+                    if (!track.pps) {
+                        track.pps = [unit.data];
+                        push = true;
+                    }
                     break;
                 case 39: // SEI
-                    //push = true;
+                    if (debug) 
+                        debugString += "SEI ";
+                    push = true;
                     break;
                 default:
                     if (unit.type >= 19 && unit.type <= 20) {
@@ -72,13 +91,13 @@ export class HEVCDemuxer {
                         if (debug) 
                             debugString += "IDR ";
                         frame = true;
-                        //push = true;
+                        push = true;
                     } else if (unit.type < 32) {
                         // Non-IDR VCL
                         if (debug) 
-                            debugString += "NDR ";
+                            debugString += "VCL ";
                         frame = true;
-                        //push = true;
+                        push = true;
                     } else {
                         // unknown
                         debugString += unit.type + "? ";
@@ -124,33 +143,58 @@ export class HEVCDemuxer {
         }
     }
 
-    private decodeRBSP(array: Uint8Array) {
-        const len = array.byteLength,
-            rbsp: number[] = [];
-        let state = 0,
-            value = 0;
+    private reverseBitsU32(value: number) {
+        let result = 0;
+        for (let i = 0; i < 32; i++) {
+            result <<= 1;
+            result |= value & 1;
+            value >>= 1;
+        }
+        return result >>> 0;
+    }
 
-        for (let i = 0; i < len; ) {
-            value = array[i++];    
-            switch (state) {
-                case 0:
-                    if (value === 0)
-                        state = 1
-                    rbsp.push(value);
-                    break;
-                case 1:
-                    if (value === 0)
-                        state = 2;
-                    else 
-                        state = 0;
-                    rbsp.push(value);
-                    break;
-                case 2:
-                    if (value !== 3)
-                        rbsp.push(value);
-                    state = 0;
-                    break;
-            }
+    private getCodecString(sps: Uint8Array) {
+        //const sps_video_parameter_set_id = (sps[0] & 0xf0) >> 4;
+        //const sps_max_sub_layers_minus1 = (sps[0] & 0x0e) >> 1;
+        //const sps_temporal_id_nesting_flag = sps[0] & 0x01;
+        const general_profile_space = (sps[1] & 0xc0) >> 6;
+        const general_tier_flag = (sps[1] & 0x20) >> 5;
+        const general_profile_idc = (sps[1] & 0x1f);
+        const general_profile_compatibility_flags = (sps[2] << 24) | (sps[3] << 16) | (sps[4] << 8) | sps[5];
+        const constraints_flags = sps.slice(6, 12);
+        const general_level_idc = sps[12];
+
+        let str = "hev1.";
+        if (general_profile_space>0)
+            str += String.fromCharCode(0x40 + general_profile_space);
+        str += general_profile_idc.toString(10);
+        str += ".";
+        str += this.reverseBitsU32(general_profile_compatibility_flags).toString(16);
+        str += ".";
+        str += general_tier_flag ? "H" : "L";
+        str += general_level_idc.toString(10);
+
+        let numCf = 0;
+        for (let i=0; i<6; i++)
+            if (constraints_flags[i]>0)
+                numCf = i+1;
+        for (let i=0; i<numCf; i++) {
+            str +=".";
+            str += constraints_flags[i].toString(16);
+        }       
+
+        return str;
+    }
+
+    private decodeRBSP(array: Uint8Array) {
+        const rbsp: number[] = [];
+        let zeroes = 0;
+
+        for (let i = 2; i < array.byteLength; ) {
+            const value = array[i++];
+            if (value !== 3 || zeroes < 2)
+                rbsp.push(value);
+            zeroes = value ? 0 : zeroes + 1;
         }
 
         return new Uint8Array(rbsp);

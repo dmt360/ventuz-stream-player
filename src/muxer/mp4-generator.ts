@@ -41,6 +41,7 @@ export type VideoTrack = {
 
     samples: VideoSample[];
 
+    codec: string;
     sps?: Uint8Array[];
     pps?: Uint8Array[];
     vps?: Uint8Array[];

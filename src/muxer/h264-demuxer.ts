@@ -30,6 +30,7 @@ export class H264Demuxer {
             width: 0,
             height: 0,
             lastKeyFrameDTS: -1,
+            codec: "avc1",
         };
         //this.firefox = navigator.userAgent.toLowerCase().indexOf("firefox") !== -1;
     }
