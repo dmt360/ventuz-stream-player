@@ -50,10 +50,7 @@ export type VideoTrack = {
 const fcCache: { [key: string]: number[] } = {};
 
 export function fourcc(i: string) {
-    return (
-        fcCache[i] ||
-        (fcCache[i] = [i.charCodeAt(0), i.charCodeAt(1), i.charCodeAt(2), i.charCodeAt(3)])
-    );
+    return fcCache[i] || (fcCache[i] = [i.charCodeAt(0), i.charCodeAt(1), i.charCodeAt(2), i.charCodeAt(3)]);
 }
 
 function u16(i: number) {
@@ -64,131 +61,147 @@ function u32(i: number) {
     return [(i >>> 24) & 0xff, (i >>> 16) & 0xff, (i >>> 8) & 0xff, i & 0xff];
 }
 
-const DREF = box("dref", [[
-    0x00, // version 0
-    0x00,
-    0x00,
-    0x00, // flags
-    0x00,
-    0x00,
-    0x00,
-    0x01, // entry_count
-    0x00,
-    0x00,
-    0x00,
-    0x0c, // entry_size
-    0x75,
-    0x72,
-    0x6c,
-    0x20, // 'url' type
-    0x00, // version 0
-    0x00,
-    0x00,
-    0x01, // entry_flags
-]]);
+const DREF = box("dref", [
+    [
+        0x00, // version 0
+        0x00,
+        0x00,
+        0x00, // flags
+        0x00,
+        0x00,
+        0x00,
+        0x01, // entry_count
+        0x00,
+        0x00,
+        0x00,
+        0x0c, // entry_size
+        0x75,
+        0x72,
+        0x6c,
+        0x20, // 'url' type
+        0x00, // version 0
+        0x00,
+        0x00,
+        0x01, // entry_flags
+    ],
+]);
 
-const HDLR_video = [
-    0x00, // version 0
-    0x00,
-    0x00,
-    0x00, // flags
-    0x00,
-    0x00,
-    0x00,
-    0x00, // pre_defined
-    0x76,
-    0x69,
-    0x64,
-    0x65, // handler_type: 'vide'
-    0x00,
-    0x00,
-    0x00,
-    0x00, // reserved
-    0x00,
-    0x00,
-    0x00,
-    0x00, // reserved
-    0x00,
-    0x00,
-    0x00,
-    0x00, // reserved
-    0x56,
-    0x69,
-    0x64,
-    0x65,
-    0x6f,
-    0x48,
-    0x61,
-    0x6e,
-    0x64,
-    0x6c,
-    0x65,
-    0x72,
-    0x00, // name: 'VideoHandler'
-];
+const DINF = box("dinf", [DREF]);
 
-const STTS = [
-    0x00, // version
-    0x00,
-    0x00,
-    0x00, // flags
-    0x00,
-    0x00,
-    0x00,
-    0x00, // entry_count
-];
+const HDLR_video = box("hdlr", [
+    [
+        0x00, // version 0
+        0x00,
+        0x00,
+        0x00, // flags
+        0x00,
+        0x00,
+        0x00,
+        0x00, // pre_defined
+        0x76,
+        0x69,
+        0x64,
+        0x65, // handler_type: 'vide'
+        0x00,
+        0x00,
+        0x00,
+        0x00, // reserved
+        0x00,
+        0x00,
+        0x00,
+        0x00, // reserved
+        0x00,
+        0x00,
+        0x00,
+        0x00, // reserved
+        0x56,
+        0x69,
+        0x64,
+        0x65,
+        0x6f,
+        0x48,
+        0x61,
+        0x6e,
+        0x64,
+        0x6c,
+        0x65,
+        0x72,
+        0x00, // name: 'VideoHandler'
+    ],
+]);
 
-const STSC = [
-    0x00, // version
-    0x00,
-    0x00,
-    0x00, // flags
-    0x00,
-    0x00,
-    0x00,
-    0x00, // entry_count
-];
+const STTS = box("stts", [
+    [
+        0x00, // version
+        0x00,
+        0x00,
+        0x00, // flags
+        0x00,
+        0x00,
+        0x00,
+        0x00, // entry_count
+    ],
+]);
 
-const STCO = [
-    0x00, // version
-    0x00,
-    0x00,
-    0x00, // flags
-    0x00,
-    0x00,
-    0x00,
-    0x00, // entry_count
-];
+const STSC = box("stsc", [
+    [
+        0x00, // version
+        0x00,
+        0x00,
+        0x00, // flags
+        0x00,
+        0x00,
+        0x00,
+        0x00, // entry_count
+    ],
+]);
 
-const STSZ = [
-    0x00, // version
-    0x00,
-    0x00,
-    0x00, // flags
-    0x00,
-    0x00,
-    0x00,
-    0x00, // sample_size
-    0x00,
-    0x00,
-    0x00,
-    0x00, // sample_count
-];
+const STCO = box("stco", [
+    [
+        0x00, // version
+        0x00,
+        0x00,
+        0x00, // flags
+        0x00,
+        0x00,
+        0x00,
+        0x00, // entry_count
+    ],
+]);
 
-const VMHD = [
-    0x00, // version
-    0x00,
-    0x00,
-    0x01, // flags
-    0x00,
-    0x00, // graphicsmode
-    0x00,
-    0x00,
-    0x00,
-    0x00,
-    0x00,
-    0x00, // opcolor
-];
+const STSZ = box("stsz", [
+    [
+        0x00, // version
+        0x00,
+        0x00,
+        0x00, // flags
+        0x00,
+        0x00,
+        0x00,
+        0x00, // sample_size
+        0x00,
+        0x00,
+        0x00,
+        0x00, // sample_count
+    ],
+]);
+
+const VMHD = box("vmhd", [
+    [
+        0x00, // version
+        0x00,
+        0x00,
+        0x01, // flags
+        0x00,
+        0x00, // graphicsmode
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x00, // opcolor
+    ],
+]);
 
 const STSD = [
     0x00, // version 0
@@ -204,7 +217,7 @@ const STSD = [
 function box(type: string, args: ArrayLike<number>[] = []) {
     let size = args.reduce((acc, arg) => acc + arg.length, 8); // 8 bytes for the box header
     const result = new Uint8Array(size);
-    
+
     result.set(u32(size), 0);
     result.set(fourcc(type), 4);
     // copy the payload into the result
@@ -216,12 +229,7 @@ function box(type: string, args: ArrayLike<number>[] = []) {
     return result;
 }
 
-function hdlr() {
-    return box("hdlr", [HDLR_video]);
-}
-
 function mdhd(timescale: number, duration: number) {
-    duration *= timescale;
     return box("mdhd", [
         [
             0x00, // version 0
@@ -237,7 +245,7 @@ function mdhd(timescale: number, duration: number) {
             0x00,
             0x03, // modification_time
             ...u32(timescale), // timescale
-            ...u32(duration), // duration
+            ...u32(duration * timescale), // duration
             0x55,
             0xc4, // 'und' language (undetermined)
             0x00,
@@ -247,7 +255,7 @@ function mdhd(timescale: number, duration: number) {
 }
 
 function mdia(track: VideoTrack) {
-    return box("mdia", [mdhd(track.timescale, track.duration), hdlr(), minf(track)]);
+    return box("mdia", [mdhd(track.timescale, track.duration), HDLR_video, minf(track)]);
 }
 
 function mfhd(sequenceNumber: number) {
@@ -263,8 +271,7 @@ function mfhd(sequenceNumber: number) {
 }
 
 function minf(track: VideoTrack) {
-    var dinf = box("dinf", [DREF]);
-    return box("minf", [box("vmhd", [VMHD]), dinf, stbl(track)]);
+    return box("minf", [VMHD, DINF, stbl(track)]);
 }
 
 export function moof(sn: number, baseMediaDecodeTime: number, track: VideoTrack) {
@@ -280,104 +287,104 @@ function mvex(track: VideoTrack) {
 }
 
 function mvhd(timescale: number, duration: number) {
-    duration *= timescale;
-    const bytes = [
-        0x00, // version 0
-        0x00,
-        0x00,
-        0x00, // flags
-        0x00,
-        0x00,
-        0x00,
-        0x01, // creation_time
-        0x00,
-        0x00,
-        0x00,
-        0x02, // modification_time
-        ...u32(timescale), // timescale
-        ...u32(duration), // duration
-        0x00,
-        0x01,
-        0x00,
-        0x00, // 1.0 rate
-        0x01,
-        0x00, // 1.0 volume
-        0x00,
-        0x00, // reserved
-        0x00,
-        0x00,
-        0x00,
-        0x00, // reserved
-        0x00,
-        0x00,
-        0x00,
-        0x00, // reserved
-        0x00,
-        0x01,
-        0x00,
-        0x00,
-        0x00,
-        0x00,
-        0x00,
-        0x00,
-        0x00,
-        0x00,
-        0x00,
-        0x00,
-        0x00,
-        0x00,
-        0x00,
-        0x00,
-        0x00,
-        0x01,
-        0x00,
-        0x00,
-        0x00,
-        0x00,
-        0x00,
-        0x00,
-        0x00,
-        0x00,
-        0x00,
-        0x00,
-        0x00,
-        0x00,
-        0x00,
-        0x00,
-        0x40,
-        0x00,
-        0x00,
-        0x00, // transformation: unity matrix
-        0x00,
-        0x00,
-        0x00,
-        0x00,
-        0x00,
-        0x00,
-        0x00,
-        0x00,
-        0x00,
-        0x00,
-        0x00,
-        0x00,
-        0x00,
-        0x00,
-        0x00,
-        0x00,
-        0x00,
-        0x00,
-        0x00,
-        0x00,
-        0x00,
-        0x00,
-        0x00,
-        0x00, // pre_defined
-        0xff,
-        0xff,
-        0xff,
-        0xff, // next_track_ID
-    ];
-    return box("mvhd", [bytes]);
+    return box("mvhd", [
+        [
+            0x00, // version 0
+            0x00,
+            0x00,
+            0x00, // flags
+            0x00,
+            0x00,
+            0x00,
+            0x01, // creation_time
+            0x00,
+            0x00,
+            0x00,
+            0x02, // modification_time
+            ...u32(timescale), // timescale
+            ...u32(duration * timescale), // duration
+            0x00,
+            0x01,
+            0x00,
+            0x00, // 1.0 rate
+            0x01,
+            0x00, // 1.0 volume
+            0x00,
+            0x00, // reserved
+            0x00,
+            0x00,
+            0x00,
+            0x00, // reserved
+            0x00,
+            0x00,
+            0x00,
+            0x00, // reserved
+            0x00,
+            0x01,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x01,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x40,
+            0x00,
+            0x00,
+            0x00, // transformation: unity matrix
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00, // pre_defined
+            0xff,
+            0xff,
+            0xff,
+            0xff, // next_track_ID
+        ],
+    ]);
 }
 
 function sdtp(track: VideoTrack) {
@@ -395,13 +402,7 @@ function sdtp(track: VideoTrack) {
 }
 
 function stbl(track: VideoTrack) {
-    return box("stbl", [
-        stsd(track),
-        box("stts", [STTS]),
-        box("stsc", [STSC]),
-        box("stsz", [STSZ]),
-        box("stco", [STCO]),
-    ]);
+    return box("stbl", [stsd(track), STTS, STSC, STSZ, STCO]);
 }
 
 function videoSample(track: VideoTrack) {
@@ -514,7 +515,6 @@ function hev1(track: VideoTrack) {
         pps: number[] = [],
         vps: number[] = [];
 
-   
     const hvcc = box("hvcC", [
         [
             0x01, // version
@@ -529,13 +529,7 @@ function hev1(track: VideoTrack) {
         ],
     ]);
 
-    return box(
-        "hev1",
-        [
-            videoSample(track),
-            hvcc,           
-        ] 
-    );
+    return box("hev1", [videoSample(track), hvcc]);
 }
 
 function stsd(track: VideoTrack) {
@@ -545,11 +539,6 @@ function stsd(track: VideoTrack) {
 }
 
 function tkhd(track: VideoTrack) {
-    const id = track.id,
-        duration = track.duration * track.timescale,
-        width = track.width,
-        height = track.height;
-
     return box("tkhd", [
         [
             0x00, // version 0
@@ -564,12 +553,12 @@ function tkhd(track: VideoTrack) {
             0x00,
             0x00,
             0x00, // modification_time
-            ...u32(id), // track_ID
+            ...u32(track.id), // track_ID
             0x00,
             0x00,
             0x00,
             0x00, // reserved
-            ...u32(duration), // duration
+            ...u32(track.duration * track.timescale), // duration
             0x00,
             0x00,
             0x00,
@@ -622,10 +611,10 @@ function tkhd(track: VideoTrack) {
             0x00,
             0x00,
             0x00, // transformation: unity matrix
-            ...u16(width), // width
+            ...u16(track.width), // width
             0x00,
             0x00, // width
-            ...u16(height), // height
+            ...u16(track.height), // height
             0x00,
             0x00, // height
         ],
@@ -633,10 +622,7 @@ function tkhd(track: VideoTrack) {
 }
 
 function traf(track: VideoTrack, baseMediaDecodeTime: number) {
-    const sampleDependencyTable = sdtp(track),
-        id = track.id;
-
-    //  console.log( "traf==> ",id ,baseMediaDecodeTime);
+    const sampleDependencyTable = sdtp(track);
 
     return box("traf", [
         box("tfhd", [
@@ -645,7 +631,7 @@ function traf(track: VideoTrack, baseMediaDecodeTime: number) {
                 0x00,
                 0x00,
                 0x00, // flags
-                ...u32(id), // track_ID
+                ...u32(track.id), // track_ID
             ],
         ]),
         box("tfdt", [
@@ -665,8 +651,8 @@ function traf(track: VideoTrack, baseMediaDecodeTime: number) {
                 8 + // traf header
                 16 + // mfhd
                 8 + // moof header
-                8
-        ), // mdat header
+                8 // mdat header
+        ),
         sampleDependencyTable,
     ]);
 }
@@ -677,14 +663,13 @@ function trak(track: VideoTrack) {
 }
 
 function trex(track: VideoTrack) {
-    const id = track.id;
     return box("trex", [
         [
             0x00, // version 0
             0x00,
             0x00,
             0x00, // flags
-            ...u32(id), // track_ID
+            ...u32(track.id), // track_ID
             0x00,
             0x00,
             0x00,
