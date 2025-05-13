@@ -31,7 +31,7 @@ export class MP4Remuxer {
     }
 
     private ISGenerated = false;
-    private nextAvcDts = 0;
+    private nextVideoDts = 0;
     private _initPTS?: number;
     private _initDTS?: number;
     private config: MP4RemuxerConfig;
@@ -76,11 +76,11 @@ export class MP4Remuxer {
                 lastDTS: number | undefined;
 
             for (let i = 0; i < inputSamples.length; i++) {
-                let avcSample = inputSamples[i],
+                let videoSample = inputSamples[i],
                     mp4SampleLength = 0;
                 // convert NALU bitstream to MP4 format (prepend NALU with size field)
-                while (avcSample.units.length) {
-                    let unit = avcSample.units.shift()!;
+                while (videoSample.units.length) {
+                    let unit = videoSample.units.shift()!;
                     view.setUint32(offset, unit.data.byteLength);
                     offset += 4;
                     mdat.set(unit.data, offset);
@@ -88,27 +88,27 @@ export class MP4Remuxer {
                     mp4SampleLength += 4 + unit.data.byteLength;
                 }
 
-                let pts = avcSample.pts - this._initPTS!;
-                let dts = avcSample.dts - this._initDTS!;
+                let pts = videoSample.pts - this._initPTS!;
+                let dts = videoSample.dts - this._initDTS!;
                 dts = Math.min(pts, dts);
 
                 if (lastDTS !== undefined) {
                     ptsnorm = this._PTSNormalize(pts, lastDTS);
                     dtsnorm = this._PTSNormalize(dts, lastDTS);
                 } else {
-                    const nextAvcDts = this.nextAvcDts;
-                    ptsnorm = this._PTSNormalize(pts, nextAvcDts);
-                    dtsnorm = this._PTSNormalize(dts, nextAvcDts);
-                    if (nextAvcDts) {
-                        const delta = Math.round(dtsnorm - nextAvcDts);
+                    const nextVideoDts = this.nextVideoDts;
+                    ptsnorm = this._PTSNormalize(pts, nextVideoDts);
+                    dtsnorm = this._PTSNormalize(dts, nextVideoDts);
+                    if (nextVideoDts) {
+                        const delta = Math.round(dtsnorm - nextVideoDts);
                         if (Math.abs(delta) < 600) {
                             if (delta) {
                                 if (delta > 1) {
-                                    logger.log(`AVC:${delta} ms hole between fragments detected,filling it`);
+                                    logger.log(`Vid:${delta} ms hole between fragments detected,filling it`);
                                 } else if (delta < -1) {
-                                    logger.log(`AVC:${-delta} ms overlapping between fragments detected`);
+                                    logger.log(`Vid:${-delta} ms overlapping between fragments detected`);
                                 }
-                                dtsnorm = nextAvcDts;
+                                dtsnorm = nextVideoDts;
                                 ptsnorm = Math.max(ptsnorm - delta, dtsnorm);
                                 logger.log(`Video/PTS/DTS adjusted: ${ptsnorm}/${dtsnorm},delta:${delta}`);
                             }
@@ -121,19 +121,19 @@ export class MP4Remuxer {
                     duration: this.config.timeBase,
                     cts: 0,
                     flags: {
-                        dependsOn: avcSample.key ? 2 : 1,
-                        isNonSync: avcSample.key ? 0 : 1,
+                        dependsOn: videoSample.key ? 2 : 1,
+                        isNonSync: videoSample.key ? 0 : 1,
                     },
                     pts,
                     dts,
-                    key: avcSample.key,
+                    key: videoSample.key,
                     units: [],
                 });
                 lastDTS = dtsnorm;
-                if (avcSample.key)
+                if (videoSample.key)
                     hasKey = true;
             }
-            this.nextAvcDts = dtsnorm;
+            this.nextVideoDts = dtsnorm;
 
             if (outputSamples.length && navigator.userAgent.toLowerCase().indexOf("chrome") > -1) {
                 let flags = outputSamples[0].flags;

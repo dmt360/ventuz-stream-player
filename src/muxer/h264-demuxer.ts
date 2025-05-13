@@ -8,23 +8,15 @@
 */
 import * as MP4 from "./mp4-generator";
 import { logger } from "./logger";
-
-export type H264DemuxerConfig = {
-    width: number;
-    height: number;
-    timeBase: number;
-    fragSize: number;
-    onBufferReset(codec: string): void;
-    onData(track: MP4.VideoTrack): void;
-};
+import { DemuxerConfig } from "./demuxer";
 
 export class H264Demuxer {
-    private config: H264DemuxerConfig;
+    private config: DemuxerConfig;
     private timestamp: number;
     private _avcTrack: MP4.VideoTrack;
     //private firefox: boolean;
 
-    constructor(config: H264DemuxerConfig) {
+    constructor(config: DemuxerConfig) {
         this.config = config;
         this.timestamp = 0;
         this._avcTrack = {

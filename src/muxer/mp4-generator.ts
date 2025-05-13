@@ -43,6 +43,7 @@ export type VideoTrack = {
 
     sps?: Uint8Array[];
     pps?: Uint8Array[];
+    vps?: Uint8Array[];
 };
 
 export const types: { [k: string]: number[] } = {
