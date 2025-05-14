@@ -1,39 +1,47 @@
 {
-  "private": true,
-  "name": "ventuz-stream-player",
-  "version": "0.8.0",
-  "author": "Tammo Hinrichs <tammo.hinrichs@ventuz.com> (https://ventuz.com/)",
-  "description": "A web component for showing and interacting with Ventuz Stream Out outputs",
-  "homepage": "https://github.com/VentuzTechnology/ventuz-stream-player",
-  "bugs": {
-    "url": "https://github.com/VentuzTechnology/ventuz-stream-player/issues"
-  },
-  "keywords": [ "ventuz", "webcomponent", "mediaserver", "streaming", "video" ],
-  "repository": { "type": "git", "url": "https://github.com/VentuzTechnology/ventuz-stream-player.git" },
-  "license": "MIT",
-  
-  "type": "module",
-  "main": "./dist/ventuz-stream-player-min.js",
-  "files": [
-    "dist"
-  ],
-  "devDependencies": {
-    "typescript": "~5.7.2",
-    "vite": "^6.2.0",
-    "vite-plugin-css-injected-by-js": "^3.5.2"
-  },
-  "scripts": {
-    "dev": "vite",
-    "build": "tsc && vite build",
-    "preview": "vite preview"
-  },
-  "prettier": {
-    "trailingComma": "es5",
-    "useTabs": false,
-    "tabWidth": 4,
-    "semi": true,
-    "singleQuote": false,
-    "printWidth": 120,
-    "objectWrap": "collapse"
-  }
+    "private": true,
+    "name": "ventuz-stream-player",
+    "version": "0.8.0",
+    "author": "Tammo Hinrichs <tammo.hinrichs@ventuz.com> (https://ventuz.com/)",
+    "description": "A web component for showing and interacting with Ventuz Stream Out outputs",
+    "homepage": "https://github.com/VentuzTechnology/ventuz-stream-player",
+    "bugs": {
+        "url": "https://github.com/VentuzTechnology/ventuz-stream-player/issues"
+    },
+    "keywords": [
+        "ventuz",
+        "webcomponent",
+        "mediaserver",
+        "streaming",
+        "video"
+    ],
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/VentuzTechnology/ventuz-stream-player.git"
+    },
+    "license": "MIT",
+    "type": "module",
+    "main": "./dist/ventuz-stream-player-min.js",
+    "files": [
+        "dist"
+    ],
+    "devDependencies": {
+        "typescript": "~5.7.2",
+        "vite": "^6.2.0",
+        "vite-plugin-css-injected-by-js": "^3.5.2"
+    },
+    "scripts": {
+        "dev": "vite",
+        "build": "tsc && vite build",
+        "preview": "vite preview"
+    },
+    "prettier": {
+        "trailingComma": "es5",
+        "useTabs": false,
+        "tabWidth": 4,
+        "semi": true,
+        "singleQuote": false,
+        "printWidth": 120,
+        "objectWrap": "collapse"
+    }
 }

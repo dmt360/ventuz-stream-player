@@ -29,22 +29,16 @@ export type VideoSample = {
 export type VideoTrack = {
     timescale: number;
     duration: number;
-
     len: number;
     id: number;
     width: number;
     height: number;
     sequenceNumber: number;
     lastKeyFrameDTS: number;
-
     nbNalu: number;
-
     samples: VideoSample[];
-
     codec: string;
-    sps?: Uint8Array;
-    pps?: Uint8Array;
-    vps?: Uint8Array;
+    decoderConfiguration?: Uint8Array;
 };
 
 const fcCache: { [key: string]: number[] } = {};
@@ -53,15 +47,15 @@ export function fourcc(i: string) {
     return fcCache[i] || (fcCache[i] = [i.charCodeAt(0), i.charCodeAt(1), i.charCodeAt(2), i.charCodeAt(3)]);
 }
 
-function u16(i: number) {
+export function u16(i: number) {
     return [(i >>> 8) & 0xff, i & 0xff];
 }
 
-function u24(i: number) {
+export function u24(i: number) {
     return [(i >>> 16) & 0xff, (i >>> 8) & 0xff, i & 0xff];
 }
 
-function u32(i: number) {
+export function u32(i: number) {
     return [(i >>> 24) & 0xff, (i >>> 16) & 0xff, (i >>> 8) & 0xff, i & 0xff];
 }
 
@@ -490,59 +484,19 @@ function videoSample(track: VideoTrack) {
     ]; // pre_defined = -1
 }
 
-function avc1(track: VideoTrack) {
-    const sps = track.sps!;
-    const pps = track.pps!;
-
-    const avcc = box("avcC", [
-        [
-            0x01, // version
-            sps[1], // profile
-            sps[2], // profile compat
-            sps[3], // level
-            0xfc | 3, // lengthSizeMinusOne, hard-coded to 4 bytes
-            0xe0 | 1, // 3bit reserved (111) + numOfSequenceParameterSets
-            ...u16(sps.length), // length of SPS
-            ...sps,
-            1, // numOfPictureParameterSets
-            ...u16(pps.length), // length of PPS
-            ...pps,
-        ],
-    ]); // "PPS"
-
-    //console.log('avcc:' + Hex.hexDump(avcc));
+function avc1(track: VideoTrack) {   
+    const avcc = box("avcC", [track.decoderConfiguration! ]);
     return box("avc1", [videoSample(track), avcc]);
 }
 
-function hev1(track: VideoTrack) {
-    /*
-    let sps: number[] = [],
-        pps: number[] = [],
-        vps: number[] = [];
-        */
-
-    const hvcc = box("hvcC", [
-        [
-            0x01, // version
-            /*
-            sps[3], // profile
-            sps[4], // profile compat
-            sps[5], // level
-            0xfc | 3, // lengthSizeMinusOne, hard-coded to 4 bytes
-            0xe0 | track.sps!.length, // 3bit reserved (111) + numOfSequenceParameterSets
-            ...sps,
-            track.pps!.length,
-            ...pps,
-            */
-        ],
-    ]);
-
-    return box("hev1", [videoSample(track), hvcc]);
+function hvc1(track: VideoTrack) {
+    const hvcc = box("hvcC", [track.decoderConfiguration! ]);
+    return box("hvc1", [videoSample(track), hvcc]);
 }
 
 function stsd(track: VideoTrack) {
     if (track.codec === "avc1") return box("stsd", [STSD, avc1(track)]);
-    else if (track.codec === "hev1") return box("stsd", [STSD, hev1(track)]);
+    else if (track.codec === "hvc1") return box("stsd", [STSD, hvc1(track)]);
     else throw new Error("Unsupmported codec: " + track.codec);
 }
 

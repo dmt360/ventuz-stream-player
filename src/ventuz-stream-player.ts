@@ -144,7 +144,7 @@ class VentuzStreamPlayer extends HTMLElement {
                     };
                 }
 
-                this.queue.push({ data: is.data, keyTSOffset: undefined });
+                this.queue.push({ data: is, keyTSOffset: undefined });
                 this.handleQueue();
             },
 

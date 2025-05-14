@@ -10,11 +10,17 @@ import * as MP4 from "./mp4-generator";
 import { logger } from "./logger";
 import { DemuxerConfig, GetBits } from "./demuxer";
 
+const NAL_VPS = 32;
+const NAL_SPS = 33;
+const NAL_PPS = 34;
+
 export class HEVCDemuxer {
     private config: DemuxerConfig;
     private timestamp: number;
     private hevcTrack: MP4.VideoTrack;
-    //private firefox: boolean;
+    private vps?: Uint8Array;
+    private sps?: Uint8Array;
+    private pps?: Uint8Array;
 
     constructor(config: DemuxerConfig) {
         this.config = config;
@@ -30,7 +36,7 @@ export class HEVCDemuxer {
             width: 0,
             height: 0,
             lastKeyFrameDTS: -1,
-            codec: "hev1",
+            codec: "hvc1",
         };
     }
 
@@ -48,29 +54,29 @@ export class HEVCDemuxer {
         units.forEach((unit) => {
             let push = false;
             switch (unit.type) {
-                case 32: // VPS
+                case NAL_VPS:
                     if (debug) debugString += "VPS ";
-                    if (!track.vps) {
-                        track.vps = unit.data;
-                        // push = true;
+                    if (!this.vps) {
+                        this.vps = unit.data;
+                        push = true;
                     }
                     break;
-                case 33: // SPS
+                case NAL_SPS:
                     if (debug) debugString += "SPS ";
-                    if (!track.sps) {
+                    if (!this.sps) {
                         track.width = this.config.width;
                         track.height = this.config.height;
-                        track.sps = unit.data;
+                        this.sps = unit.data;
                         track.duration = 0;
 
                         this.config.onBufferReset(this.getCodecString());
                         push = true;
                     }
                     break;
-                case 34: // PPS
+                case NAL_PPS: // PPS
                     if (debug) debugString += "PPS ";
-                    if (!track.pps) {
-                        track.pps = unit.data;
+                    if (!this.pps) {
+                        this.pps = unit.data;
                         push = true;
                     }
                     break;
@@ -84,6 +90,7 @@ export class HEVCDemuxer {
                         if (debug) debugString += "IDR ";
                         frame = true;
                         push = true;
+                        key = true;
                     } else if (unit.type < 32) {
                         // Non-IDR VCL
                         if (debug) debugString += "VCL ";
@@ -129,6 +136,7 @@ export class HEVCDemuxer {
         }
 
         if (track.samples.length >= Math.max(1, this.config.fragSize)) {
+            if (!this.hevcTrack.decoderConfiguration && this.vps && this.pps && this.sps) this.makeHvCC();
             this.config.onData(this.hevcTrack);
         }
     }
@@ -144,13 +152,13 @@ export class HEVCDemuxer {
     }
 
     private getCodecString() {
-        const sps = new GetBits(this.decodeRBSP(this.hevcTrack.sps!));
+        const sps = new GetBits(this.decodeRBSP(this.sps!));
         sps.get(4); // sps_video_parameter_set_id
         const sps_max_layers_minus1 = sps.get(3);
         sps.get(1); // sps_temporal_id_nesting_flag
         const ptl = this.parseProfileTierLevel(sps, sps_max_layers_minus1);
 
-        let str = "hev1.";
+        let str = "hvc1.";
         if (ptl.general_profile_space > 0) str += String.fromCharCode(0x40 + ptl.general_profile_space);
         str += ptl.general_profile_idc.toString(10);
         str += ".";
@@ -422,7 +430,7 @@ export class HEVCDemuxer {
     }
 
     private parseSPS() {
-        const sps = new GetBits(this.decodeRBSP(this.hevcTrack.sps!));
+        const sps = new GetBits(this.decodeRBSP(this.sps!));
         sps.get(4); // sps_video_parameter_set_id
         const sps_max_sub_layers_minus1 = sps.get(3);
         const sps_temporal_id_nesting_flag = sps.get(1);
@@ -548,7 +556,7 @@ export class HEVCDemuxer {
     }
 
     private parseVPS() {
-        const vps = new GetBits(this.decodeRBSP(this.hevcTrack.vps!));
+        const vps = new GetBits(this.decodeRBSP(this.vps!));
 
         vps.get(4); // vps_video_parameter_set_id
         vps.get(2); // vps_reserved_three_2bits
@@ -568,7 +576,7 @@ export class HEVCDemuxer {
     }
 
     private parsePPS() {
-        const pps = new GetBits(this.decodeRBSP(this.hevcTrack.pps!));
+        const pps = new GetBits(this.decodeRBSP(this.pps!));
         pps.getExpGolomb(); // pps_pic_parameter_set_id
         pps.getExpGolomb(); // pps_seq_parameter_set_id
 
@@ -615,6 +623,77 @@ export class HEVCDemuxer {
             ...vpsData,
             ...ppsData,
         };
+    }
+
+    private makeHvCC() {
+        const data = this.parseHEVCInitData();
+        const sps = this.sps!;
+        const pps = this.pps!;
+        const vps = this.vps!;
+
+        const gcifBytes: number[] = [];
+        for (let i = 0; i < 6; i++)
+            gcifBytes.push(Math.floor(data.general_constraint_indicator_flags * Math.pow(256, i - 5)) & 0xff);
+
+        const min_spatial_segmentation_idc = data.min_spatial_segmentation_idc || 0;
+
+        let parallelismType;
+        if (min_spatial_segmentation_idc) {
+            if (data.entropy_coding_sync_enabled_flag && data.tiles_enabled_flag) parallelismType = 0; // mixed
+            else if (data.entropy_coding_sync_enabled_flag) parallelismType = 3; // wavefront
+            else if (data.tiles_enabled_flag) parallelismType = 2; // tile
+            else parallelismType = 1; // slice
+        } else parallelismType = 0;
+
+        const averageFrameRate = 0;
+        const constantFrameRate = 0;
+        const numTemporalLayers = Math.max(data.sps_max_sub_layers_minus1, data.vps_max_sub_layers_minus1) + 1;
+        const lengthSizeMinusOne = 3;
+
+        console.log(data.general_profile_compatibility_flags.toString(16));
+        console.log(
+            MP4.u32(data.general_profile_compatibility_flags)
+                .map((x) => x.toString(16))
+                .join(" ")
+        );
+
+        this.hevcTrack.decoderConfiguration = new Uint8Array([
+            1, // version
+
+            (data.general_profile_space << 6) | (data.general_tier_flag << 5) | data.general_profile_idc,
+            ...MP4.u32(data.general_profile_compatibility_flags),
+            ...gcifBytes,
+            data.general_level_idc,
+
+            ...MP4.u16(min_spatial_segmentation_idc | 0xf000),
+            parallelismType | 0xfc,
+
+            data.chroma_format_idc | 0xfc,
+            data.bit_depth_luma_minus8 | 0xf8,
+            data.bit_depth_chroma_minus8 | 0xf8,
+            ...MP4.u16(averageFrameRate),
+            (constantFrameRate << 6) |
+                (numTemporalLayers << 3) |
+                (data.sps_temporal_id_nesting_flag << 2) |
+                lengthSizeMinusOne,
+
+            3, // # of arrays
+
+            0x80 | NAL_VPS,
+            ...MP4.u16(1),
+            ...MP4.u16(vps.byteLength),
+            ...vps,
+
+            0x80 | NAL_SPS,
+            ...MP4.u16(1),
+            ...MP4.u16(sps.byteLength),
+            ...sps,
+
+            0x80 | NAL_PPS,
+            ...MP4.u16(1),
+            ...MP4.u16(pps.byteLength),
+            ...pps,
+        ]);
     }
 }
 

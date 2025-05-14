@@ -1,27 +1,19 @@
 /**
  * fMP4 remuxer
- * 
+ *
  * Originally from https://github.com/dailymotion/hls.js
- * Copyright (c) 2017 Dailymotion, licensed under the Apache License, Version 2.0 
- * 
+ * Copyright (c) 2017 Dailymotion, licensed under the Apache License, Version 2.0
+ *
  * Typescript conversion and modifications by Tammo Hinrichs
  */
 
 import * as MP4 from "./mp4-generator";
 import { logger } from "./logger";
 
-export type InitSegmentData = {
-    data: Uint8Array;
-    metadata: {
-        width: number;
-        height: number;
-    };
-};
-
 export type MP4RemuxerConfig = {
     timeBase: number;
     timeScale: number;
-    onInitSegment(is: InitSegmentData): void;
+    onInitSegment(is: Uint8Array): void;
     onData(data: Uint8Array, keyFrameTS: number | undefined): void;
 };
 
@@ -130,8 +122,7 @@ export class MP4Remuxer {
                     units: [],
                 });
                 lastDTS = dtsnorm;
-                if (videoSample.key)
-                    hasKey = true;
+                if (videoSample.key) hasKey = true;
             }
             this.nextVideoDts = dtsnorm;
 
@@ -144,7 +135,7 @@ export class MP4Remuxer {
 
             const moof = MP4.moof(track.sequenceNumber++, dtsnorm, track);
             this.config.onData(moof, undefined);
-            this.config.onData(mdat, hasKey ? track.lastKeyFrameDTS-dts0 : undefined);
+            this.config.onData(mdat, hasKey ? track.lastKeyFrameDTS - dts0 : undefined);
         } catch (e) {
             logger.error("Error while remuxing video track", e);
         }
@@ -158,17 +149,11 @@ export class MP4Remuxer {
             computePTSDTS = this._initPTS === undefined;
         let initPTS = Infinity,
             initDTS = Infinity,
-            initseg: InitSegmentData | null = null;
+            initseg: Uint8Array | null = null;
 
-        if (videoTrack.sps && videoTrack.pps && videoSamples.length) {
+        if (videoTrack.decoderConfiguration && videoSamples.length) {
             videoTrack.timescale = this.config.timeScale; //this.MP4_TIMESCALE;
-            initseg = {
-                data: MP4.initSegment(videoTrack),
-                metadata: {
-                    width: videoTrack.width,
-                    height: videoTrack.height,
-                },
-            };
+            initseg = MP4.initSegment(videoTrack);
             if (computePTSDTS) {
                 initPTS = Math.min(initPTS, videoSamples[0].pts - this.config.timeBase);
                 initDTS = Math.min(initDTS, videoSamples[0].dts - this.config.timeBase);
