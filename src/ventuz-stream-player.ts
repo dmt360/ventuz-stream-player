@@ -118,7 +118,7 @@ class VentuzStreamPlayer extends HTMLElement {
             timeBase: hdr.videoFrameRateDen,
             timeScale: hdr.videoFrameRateNum,
             onInitSegment: (is) => {
-                logger.log("got is", is);
+                logger.log("got is");
 
                 delete this.mediaSource;
 

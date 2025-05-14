@@ -5,6 +5,7 @@
  * Copyright (c) 2017 Dailymotion, licensed under the Apache License, Version 2.0
  *
  * Typescript conversion and modifications by Tammo Hinrichs
+ * Copyright (c) 2025 Ventuz Technology, all rights reserved.
  */
 
 import * as MP4 from "./mp4-generator";

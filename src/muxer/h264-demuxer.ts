@@ -5,6 +5,7 @@
   Copyright (c) 2018 ChihChengYang, licensed under the BSD-2-Clause license
 
   Typescript conversion and modifications by Tammo Hinrichs
+  Copyright (c) 2025 Ventuz Technology, all rights reserved.
 */
 import * as MP4 from "./mp4-generator";
 import { logger } from "./logger";

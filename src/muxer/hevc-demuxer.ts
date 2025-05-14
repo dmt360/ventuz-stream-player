@@ -4,7 +4,8 @@
   Originally from https://github.com/ChihChengYang/wfs.js 
   Copyright (c) 2018 ChihChengYang, licensed under the BSD-2-Clause license
 
-  Adaption to HEVC, Typescript conversion and modifications by Tammo Hinrichs
+  Adaptation to HEVC, Typescript conversion and modifications by Tammo Hinrichs
+  Copyright (c) 2025 Ventuz Technology, all rights reserved.
 */
 import * as MP4 from "./mp4-generator";
 import { logger } from "./logger";
@@ -13,6 +14,7 @@ import { DemuxerConfig, GetBits } from "./demuxer";
 const NAL_VPS = 32;
 const NAL_SPS = 33;
 const NAL_PPS = 34;
+const NAL_SEI = 39;
 
 export class HEVCDemuxer {
     private config: DemuxerConfig;
@@ -80,7 +82,7 @@ export class HEVCDemuxer {
                         push = true;
                     }
                     break;
-                case 39: // SEI
+                case NAL_SEI: // SEI
                     if (debug) debugString += "SEI ";
                     push = true;
                     break;
@@ -650,13 +652,6 @@ export class HEVCDemuxer {
         const numTemporalLayers = Math.max(data.sps_max_sub_layers_minus1, data.vps_max_sub_layers_minus1) + 1;
         const lengthSizeMinusOne = 3;
 
-        console.log(data.general_profile_compatibility_flags.toString(16));
-        console.log(
-            MP4.u32(data.general_profile_compatibility_flags)
-                .map((x) => x.toString(16))
-                .join(" ")
-        );
-
         this.hevcTrack.decoderConfiguration = new Uint8Array([
             1, // version
 
@@ -695,9 +690,4 @@ export class HEVCDemuxer {
             ...pps,
         ]);
     }
-}
-
-export interface HEVCDecoderConfigurationRecord {
-    min_spatial_segmentation_idc: number;
-    parallelismType: number;
 }

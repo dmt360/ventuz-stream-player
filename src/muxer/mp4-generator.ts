@@ -5,6 +5,7 @@
  * Copyright (c) 2017 Dailymotion, licensed under the Apache License, Version 2.0
  *
  * Typescript conversion and modifications by Tammo Hinrichs
+ * Copyright (c) 2025 Ventuz Technology, all rights reserved.
  */
 
 export type Unit = {
@@ -56,7 +57,7 @@ export function u24(i: number) {
 }
 
 export function u32(i: number) {
-    return [(i >>> 24) & 0xff, (i >>> 16) & 0xff, (i >>> 8) & 0xff, i & 0xff];
+    return [(i / 0x1000000) & 0xff, (i >>> 16) & 0xff, (i >>> 8) & 0xff, i & 0xff];
 }
 
 const DREF = box("dref", [
