@@ -5,7 +5,9 @@
  * Copyright (c) 2025 Ventuz Technology, all rights reserved.
  */
 
+import { DemuxerConfig } from "./muxer/demuxer";
 import { H264Demuxer } from "./muxer/h264-demuxer";
+import { HEVCDemuxer } from "./muxer/hevc-demuxer";
 import { MP4Remuxer } from "./muxer/mp4-remuxer";
 import { logger } from "./muxer/logger";
 
@@ -62,7 +64,7 @@ class VentuzStreamPlayer extends HTMLElement {
     private video?: HTMLVideoElement;
     private statusLine?: HTMLDivElement;
 
-    private h264Demuxer?: H264Demuxer;
+    private Demuxer?: H264Demuxer | HEVCDemuxer;
     private mp4Remuxer?: MP4Remuxer;
     private queue: QueueEntry[] = [];
 
@@ -102,9 +104,9 @@ class VentuzStreamPlayer extends HTMLElement {
 
         if (this.streamHeader.videoCodecFourCC !== 0x68323634) {
             // h264 only
-            logger.error("Unsupported codec", this.streamHeader.videoCodecFourCC.toString(16));
-            this.setStatus("errBadFormat");
-            return false;
+            //logger.error("Unsupported codec", this.streamHeader.videoCodecFourCC.toString(16));
+            //this.setStatus("errBadFormat");
+            //return false;
         }
 
         if (this.video) {
@@ -116,7 +118,7 @@ class VentuzStreamPlayer extends HTMLElement {
             timeBase: hdr.videoFrameRateDen,
             timeScale: hdr.videoFrameRateNum,
             onInitSegment: (is) => {
-                logger.log("got is", is);
+                logger.log("got is");
 
                 delete this.mediaSource;
 
@@ -142,7 +144,7 @@ class VentuzStreamPlayer extends HTMLElement {
                     };
                 }
 
-                this.queue.push({ data: is.data, keyTSOffset: undefined });
+                this.queue.push({ data: is, keyTSOffset: undefined });
                 this.handleQueue();
             },
 
@@ -152,7 +154,7 @@ class VentuzStreamPlayer extends HTMLElement {
             },
         });
 
-        this.h264Demuxer = new H264Demuxer({
+        const demuxerConfig: DemuxerConfig = {
             width: hdr.videoWidth,
             height: hdr.videoHeight,
             timeBase: hdr.videoFrameRateDen,
@@ -166,7 +168,12 @@ class VentuzStreamPlayer extends HTMLElement {
             onData: (track) => {
                 this.mp4Remuxer?.pushVideo(track);
             },
-        });
+        }
+
+        if (this.streamHeader.videoCodecFourCC !== 0x68323634)
+            this.Demuxer = new HEVCDemuxer(demuxerConfig);
+        else 
+            this.Demuxer = new H264Demuxer(demuxerConfig);
 
         return true;
     }
@@ -183,7 +190,7 @@ class VentuzStreamPlayer extends HTMLElement {
         delete this.vidSrcBuffer;
 
         delete this.mp4Remuxer;
-        delete this.h264Demuxer;
+        delete this.Demuxer;
 
         delete this.frameHeader;
         delete this.streamHeader;
@@ -258,8 +265,8 @@ class VentuzStreamPlayer extends HTMLElement {
     }
 
     private handleVideoFrame(data: Uint8Array) {
-        if (this.h264Demuxer && this.streamHeader && this.frameHeader) {
-            this.h264Demuxer.pushData(data);
+        if (this.Demuxer && this.streamHeader && this.frameHeader) {
+            this.Demuxer.pushData(data);
 
             // make sure we get a keyframe at least every 4 seconds so we can throw away old frames
             if (this.frameHeader.flags === "keyFrame") {

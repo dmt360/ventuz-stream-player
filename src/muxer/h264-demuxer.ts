@@ -5,29 +5,23 @@
   Copyright (c) 2018 ChihChengYang, licensed under the BSD-2-Clause license
 
   Typescript conversion and modifications by Tammo Hinrichs
+  Copyright (c) 2025 Ventuz Technology, all rights reserved.
 */
 import * as MP4 from "./mp4-generator";
 import { logger } from "./logger";
-
-export type H264DemuxerConfig = {
-    width: number;
-    height: number;
-    timeBase: number;
-    fragSize: number;
-    onBufferReset(codec: string): void;
-    onData(track: MP4.VideoTrack): void;
-};
+import { DemuxerConfig } from "./demuxer";
 
 export class H264Demuxer {
-    private config: H264DemuxerConfig;
+    private config: DemuxerConfig;
     private timestamp: number;
-    private _avcTrack: MP4.VideoTrack;
-    //private firefox: boolean;
+    private avcTrack: MP4.VideoTrack;
+    private sps?: Uint8Array;
+    private pps?: Uint8Array;
 
-    constructor(config: H264DemuxerConfig) {
+    constructor(config: DemuxerConfig) {
         this.config = config;
         this.timestamp = 0;
-        this._avcTrack = {
+        this.avcTrack = {
             id: 1,
             sequenceNumber: 0,
             samples: [],
@@ -38,12 +32,13 @@ export class H264Demuxer {
             width: 0,
             height: 0,
             lastKeyFrameDTS: -1,
+            codec: "avc1",
         };
         //this.firefox = navigator.userAgent.toLowerCase().indexOf("firefox") !== -1;
     }
 
     pushData(array: Uint8Array) {
-        const track = this._avcTrack,
+        const track = this.avcTrack,
             samples = track.samples,
             units = this.parseAVCNALu(array),
             debug = false;
@@ -78,10 +73,10 @@ export class H264Demuxer {
                     if (debug) {
                         debugString += "SPS ";
                     }
-                    if (!track.sps) {
+                    if (!this.sps) {
                         track.width = this.config.width;
                         track.height = this.config.height;
-                        track.sps = [unit.data];
+                        this.sps = unit.data;
                         track.duration = 0;
                         const codecstring = unit.data
                             .subarray(1, 4)
@@ -95,8 +90,8 @@ export class H264Demuxer {
                     if (debug) {
                         debugString += "PPS ";
                     }
-                    if (!track.pps) {
-                        track.pps = [unit.data];
+                    if (!this.pps) {
+                        this.pps = unit.data;
                         push = true;
                     }
                     break;
@@ -127,8 +122,7 @@ export class H264Demuxer {
                 size: length,
             });
 
-            if (key)
-                track.lastKeyFrameDTS = this.timestamp;
+            if (key) track.lastKeyFrameDTS = this.timestamp;
 
             track.len += length;
             track.nbNalu += units2.length;
@@ -136,9 +130,11 @@ export class H264Demuxer {
                 this.timestamp += this.config.timeBase;
             }
         }
-        //if (this.firefox || track.samples.length >= 2) {
+
         if (track.samples.length >= Math.max(1, this.config.fragSize)) {
-            this.config.onData(this._avcTrack);
+            if (!this.avcTrack.decoderConfiguration && this.sps && this.pps) this.makeAvCC();
+
+            this.config.onData(this.avcTrack);
         }
     }
 
@@ -196,5 +192,23 @@ export class H264Demuxer {
         }
 
         return units;
+    }
+
+    private makeAvCC() {
+        const sps = this.sps!;
+        const pps = this.pps!;
+        this.avcTrack.decoderConfiguration = new Uint8Array([
+            0x01, // version
+            sps[1], // profile
+            sps[2], // profile compat
+            sps[3], // level
+            0xfc | 3, // lengthSizeMinusOne, hard-coded to 4 bytes
+            0xe0 | 1, // 3bit reserved (111) + numOfSequenceParameterSets
+            ...MP4.u16(sps.length), // length of SPS
+            ...sps,
+            1, // numOfPictureParameterSets
+            ...MP4.u16(pps.length), // length of PPS
+            ...pps,
+        ]);
     }
 }

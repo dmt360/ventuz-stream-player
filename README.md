@@ -4,16 +4,19 @@
 
 A web component for playing back Ventuz Stream Out outputs in the browser, with keyboard, mouse, and touch input support.
 
+Tested on Chrome, Edge and Firefox on Windows, Safari and Chrome on MacOS, Chrome on Android, and Safari on iPadOS.
+
 ## Usage
 
 ### Ventuz configuration
 
 - ventuz-stream-player requires at least Ventuz 8.1. Earlier versions are missing the required Websocket API needed for the component to run.
 - Add any number of Stream Out outputs to your Device Configuration. The following settings are required or recommended:
-  - __Codec__: H.264 is required
-  - __Color Sampling__: 4.2.0 is the safe choice; some browsers (eg. Chrome/Edge on Windows) may support 4.4.4
-  - __Encode Mode__: Low latency if you want input, Streaming otherwise
+  - __Codec__: Both H.264 and HEVC are supported. To enable HEVC on Windows machines, you will need to install the [HEVC Video Extensions](https://apps.microsoft.com/detail/9nmzlz57r3t7).
+  - __Color Sampling__: 4:2:0 is the safe choice; some browsers (eg. Chrome/Edge on Windows and Safari on iPad) may support 4:4:4.
+  - __Encode Mode__: Low latency if you want input, Streaming otherwise.
   - __Rate Control__ etc: What suits you best. Please note that this choice may impact input latency depending on the browser and platform; if in doubt, experiment.
+  - __HDR Color Space__: Rec.2100 HDR is fully supported with HEVC (on Chromium based browsers on Windows and MacOS, and Safari on MacOS and iPadOS). In other cases, please select Rec.709 as a fallback.
 
 ### Including the component in your project
 
