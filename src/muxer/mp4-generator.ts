@@ -57,6 +57,10 @@ function u16(i: number) {
     return [(i >>> 8) & 0xff, i & 0xff];
 }
 
+function u24(i: number) {
+    return [(i >>> 16) & 0xff, (i >>> 8) & 0xff, i & 0xff];
+}
+
 function u32(i: number) {
     return [(i >>> 24) & 0xff, (i >>> 16) & 0xff, (i >>> 8) & 0xff, i & 0xff];
 }
@@ -88,7 +92,7 @@ const DREF = box("dref", [
 
 const DINF = box("dinf", [DREF]);
 
-const HDLR_video = box("hdlr", [
+const HDLR = box("hdlr", [
     [
         0x00, // version 0
         0x00,
@@ -255,7 +259,7 @@ function mdhd(timescale: number, duration: number) {
 }
 
 function mdia(track: VideoTrack) {
-    return box("mdia", [mdhd(track.timescale, track.duration), HDLR_video, minf(track)]);
+    return box("mdia", [mdhd(track.timescale, track.duration), HDLR, minf(track)]);
 }
 
 function mfhd(sequenceNumber: number) {
@@ -511,13 +515,16 @@ function avc1(track: VideoTrack) {
 }
 
 function hev1(track: VideoTrack) {
+    /*
     let sps: number[] = [],
         pps: number[] = [],
         vps: number[] = [];
+        */
 
     const hvcc = box("hvcC", [
         [
             0x01, // version
+            /*
             sps[3], // profile
             sps[4], // profile compat
             sps[5], // level
@@ -526,6 +533,7 @@ function hev1(track: VideoTrack) {
             ...sps,
             track.pps!.length,
             ...pps,
+            */
         ],
     ]);
 
@@ -535,89 +543,35 @@ function hev1(track: VideoTrack) {
 function stsd(track: VideoTrack) {
     if (track.codec === "avc1") return box("stsd", [STSD, avc1(track)]);
     else if (track.codec === "hev1") return box("stsd", [STSD, hev1(track)]);
-    else throw new Error("Unsupported codec: " + track.codec);
+    else throw new Error("Unsupmported codec: " + track.codec);
 }
 
 function tkhd(track: VideoTrack) {
     return box("tkhd", [
-        [
-            0x00, // version 0
-            0x00,
-            0x00,
-            0x07, // flags
-            0x00,
-            0x00,
-            0x00,
-            0x00, // creation_time
-            0x00,
-            0x00,
-            0x00,
-            0x00, // modification_time
-            ...u32(track.id), // track_ID
-            0x00,
-            0x00,
-            0x00,
-            0x00, // reserved
-            ...u32(track.duration * track.timescale), // duration
-            0x00,
-            0x00,
-            0x00,
-            0x00,
-            0x00,
-            0x00,
-            0x00,
-            0x00, // reserved
-            0x00,
-            0x00, // layer
-            0x00,
-            0x00, // alternate_group
-            0x00,
-            0x00, // non-audio track volume
-            0x00,
-            0x00, // reserved
-            0x00,
-            0x01,
-            0x00,
-            0x00,
-            0x00,
-            0x00,
-            0x00,
-            0x00,
-            0x00,
-            0x00,
-            0x00,
-            0x00,
-            0x00,
-            0x00,
-            0x00,
-            0x00,
-            0x00,
-            0x01,
-            0x00,
-            0x00,
-            0x00,
-            0x00,
-            0x00,
-            0x00,
-            0x00,
-            0x00,
-            0x00,
-            0x00,
-            0x00,
-            0x00,
-            0x00,
-            0x00,
-            0x40,
-            0x00,
-            0x00,
-            0x00, // transformation: unity matrix
-            ...u16(track.width), // width
-            0x00,
-            0x00, // width
-            ...u16(track.height), // height
-            0x00,
-            0x00, // height
-        ],
+        [0x00], // version 0
+        u24(7), // flags
+        u32(0), // creation_time
+        u32(0), // modification_time
+        u32(track.id), // track_ID
+        u32(0), // reserved
+        u32(track.duration * track.timescale), // duration
+        u32(0), // reserved
+        u32(0), // reserved
+        u16(0), // layer
+        u16(0), // alternate_group
+        u16(0), // track volume
+        u16(0), // reserved
+        u32(1 << 16), // transformation: unity matrix
+        u32(0),
+        u32(0),
+        u32(0),
+        u32(1 << 16),
+        u32(0),
+        u32(0),
+        u32(0),
+        u32(1 << 30),
+        u32(track.width << 16), // width
+        u32(track.height << 16), // height
     ]);
 }
 
@@ -626,22 +580,12 @@ function traf(track: VideoTrack, baseMediaDecodeTime: number) {
 
     return box("traf", [
         box("tfhd", [
-            [
-                0x00, // version 0
-                0x00,
-                0x00,
-                0x00, // flags
-                ...u32(track.id), // track_ID
-            ],
+            u32(0), // version 0 / flags
+            u32(track.id), // track_ID
         ]),
         box("tfdt", [
-            [
-                0x00, // version 0
-                0x00,
-                0x00,
-                0x00, // flags
-                ...u32(baseMediaDecodeTime), // baseMediaDecodeTime
-            ],
+            u32(0), // version 0 / flags
+            u32(baseMediaDecodeTime), // baseMediaDecodeTime
         ]),
         trun(
             track,
@@ -664,29 +608,12 @@ function trak(track: VideoTrack) {
 
 function trex(track: VideoTrack) {
     return box("trex", [
-        [
-            0x00, // version 0
-            0x00,
-            0x00,
-            0x00, // flags
-            ...u32(track.id), // track_ID
-            0x00,
-            0x00,
-            0x00,
-            0x01, // default_sample_description_index
-            0x00,
-            0x00,
-            0x00,
-            0x00, // default_sample_duration
-            0x00,
-            0x00,
-            0x00,
-            0x00, // default_sample_size
-            0x00,
-            0x01,
-            0x00,
-            0x01, // default_sample_flags
-        ],
+        u32(0), // version 0 / flags
+        u32(track.id), // track_ID
+        u32(1), // default_sample_description_index
+        u32(0), // default_sample_duration
+        u32(0), // default_sample_size
+        u32(0), // default_sample_flags
     ]);
 }
 
@@ -696,16 +623,11 @@ function trun(track: VideoTrack, offset: number) {
         arraylen = 12 + 16 * len,
         array = new Uint8Array(arraylen);
 
-    //sample = samples[0];
-    //       console.log( "trun==> ",sample.duration, sample.cts ,sample.size,len );
-
     offset += 8 + arraylen;
     array.set(
         [
             0x00, // version 0
-            0x00,
-            0x0f,
-            0x01, // flags
+            ...u24(0x0f01), // flags
             ...u32(len), // sample_count
             ...u32(offset), // data_offset
         ],
