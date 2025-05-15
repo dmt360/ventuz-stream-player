@@ -413,6 +413,7 @@ class VentuzStreamPlayer extends HTMLElement {
         const video = (this.video = document.createElement("video"));
         video.muted = true;
         video.controls = false;
+        video.playsInline = true;
 
         video.oncanplay = (_) => {
             if (this.vidSrcBuffer) {
