@@ -12,7 +12,7 @@ Tested on Chrome, Edge and Firefox on Windows, Safari and Chrome on MacOS, Chrom
 
 - ventuz-stream-player requires at least Ventuz 8.1. Earlier versions are missing the required Websocket API needed for the component to run.
 - Add any number of Stream Out outputs to your Device Configuration. The following settings are required or recommended:
-  - __Codec__: Both H.264 and HEVC are supported. To enable HEVC on Windows machines, you will need to install the [HEVC Video Extensions](https://apps.microsoft.com/detail/9nmzlz57r3t7).
+  - __Codec__: Both H.264 and HEVC are supported. To enable HEVC playback on Windows machines, you will need to install the [HEVC Video Extensions](https://apps.microsoft.com/detail/9nmzlz57r3t7) on the machine running your browser.
   - __Color Sampling__: 4:2:0 is the safe choice; some browsers (eg. Chrome/Edge on Windows and Safari on iPad) may support 4:4:4.
   - __Encode Mode__: Low latency if you want input, Streaming otherwise.
   - __Rate Control__ etc: What suits you best. Please note that this choice may impact input latency depending on the browser and platform. If in doubt, experiment.
@@ -49,7 +49,7 @@ You can style the appearance of ventuz-stream-player by overriding the following
 #### Internationalization
 
 You can change the error message strings by listening to the `ventuz-stream-player:strings` event. The event details contain an object with 
-all built-in messages; just change the strings in that object to anything you'd like. For a list of all possible strings, check the `defaultStatusMsgs` object in `ventuz-stream-player.ts´.
+all built-in messages; just change the strings in that object to anything you'd like. For a list of all possible strings, check the `defaultStatusMsgs` object in `ventuz-stream-player.ts`.
 
 ## Building
 
