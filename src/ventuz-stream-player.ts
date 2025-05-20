@@ -83,7 +83,10 @@ class VentuzStreamPlayer extends HTMLElement {
             this.vidSrcBuffer.onerror = (e) => {
                 logger.error("vid source error", e);
                 this.closeStream();
-                this.setStatus("errGeneric");
+                if (this.lastLatency) {
+                    this.setStatus("errGeneric");
+                    if (this.retryInterval) this.retryHandle = setTimeout(() => this.openWS(), this.retryInterval);
+                } else this.setStatus("errBadFormat");
             };
 
             this.vidSrcBuffer.onupdateend = () => this.handleQueue();
@@ -97,6 +100,7 @@ class VentuzStreamPlayer extends HTMLElement {
 
         this.streamHeader = hdr;
         this.lastKeyFrameIndex = -1;
+        this.lastLatency = 0;
         while (hdr.videoFrameRateDen < 1000) {
             hdr.videoFrameRateNum *= 10;
             hdr.videoFrameRateDen *= 10;
@@ -140,7 +144,11 @@ class VentuzStreamPlayer extends HTMLElement {
                     this.video.onerror = (e) => {
                         logger.error("video error", e);
                         this.closeStream();
-                        this.setStatus("errBadFormat");
+                        if (this.lastLatency) {
+                            this.setStatus("errGeneric");
+                            if (this.retryInterval)
+                                this.retryHandle = setTimeout(() => this.openWS(), this.retryInterval);
+                        } else this.setStatus("errBadFormat");
                     };
                 }
 
@@ -168,12 +176,10 @@ class VentuzStreamPlayer extends HTMLElement {
             onData: (track) => {
                 this.mp4Remuxer?.pushVideo(track);
             },
-        }
+        };
 
-        if (this.streamHeader.videoCodecFourCC !== 0x68323634)
-            this.Demuxer = new HEVCDemuxer(demuxerConfig);
-        else 
-            this.Demuxer = new H264Demuxer(demuxerConfig);
+        if (this.streamHeader.videoCodecFourCC !== 0x68323634) this.Demuxer = new HEVCDemuxer(demuxerConfig);
+        else this.Demuxer = new H264Demuxer(demuxerConfig);
 
         return true;
     }
@@ -355,14 +361,15 @@ class VentuzStreamPlayer extends HTMLElement {
         // randomize the max keyframe interval to avoid all clients requesting at the same time
         this.maxKfInterval = 4 + 2 * Math.random();
 
-        if (window.overrideVSPStrings)
-            window.overrideVSPStrings(this.statusMsgs);
+        if (window.overrideVSPStrings) window.overrideVSPStrings(this.statusMsgs);
 
-        this.dispatchEvent(new CustomEvent("ventuz-stream-player:strings", {
-            bubbles: true,
-            cancelable: false,
-            detail: this.statusMsgs,
-        }));
+        this.dispatchEvent(
+            new CustomEvent("ventuz-stream-player:strings", {
+                bubbles: true,
+                cancelable: false,
+                detail: this.statusMsgs,
+            })
+        );
     }
 
     static observedAttributes = [
