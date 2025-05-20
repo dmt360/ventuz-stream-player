@@ -10,6 +10,7 @@ import { H264Demuxer } from "./muxer/h264-demuxer";
 import { HEVCDemuxer } from "./muxer/hevc-demuxer";
 import { MP4Remuxer } from "./muxer/mp4-remuxer";
 import { logger } from "./muxer/logger";
+import { keyEventToVKey } from "./key-mapper";
 
 import "./style.css";
 
@@ -617,7 +618,7 @@ class VentuzStreamPlayer extends HTMLElement {
         };
 
         overlay.onkeypress = (e) => {
-            // logger.log("press", e);
+            logger.log("press", e.key);
             if (!this.useKeyboard) return;
             e.stopPropagation();
             e.preventDefault();
@@ -625,19 +626,34 @@ class VentuzStreamPlayer extends HTMLElement {
 
         overlay.onkeyup = (e) => {
             if (!this.useKeyboard) return;
-            this.sendCommand({ type: "keyUp", data: e.keyCode });
+            var vkey = keyEventToVKey(e);
+            if (vkey != null) this.sendCommand({ type: "keyUp", data: vkey });
             e.stopPropagation();
             e.preventDefault();
         };
 
         overlay.onkeydown = (e) => {
-            //logger.log(e);
             if (!this.useKeyboard) return;
-            this.sendCommand({ type: "keyDown", data: e.keyCode });
-            this.sendCommand({
-                type: "char",
-                data: e.keyCode >= 32 ? e.key.charCodeAt(0) : e.keyCode,
-            });
+            var vkey = keyEventToVKey(e);
+            if (vkey != null) {
+                if (e.repeat) this.sendCommand({ type: "keyUp", data: vkey });
+
+                this.sendCommand({ type: "keyDown", data: vkey });
+
+                if (vkey < 32)
+                    this.sendCommand({
+                        type: "char",
+                        data: vkey,
+                    });
+            }
+
+            if (e.key.length == 1)
+                this.sendCommand({
+                    type: "char",
+                    data: e.key.charCodeAt(0),
+                });
+
+            //;
             e.stopPropagation();
             e.preventDefault();
         };
