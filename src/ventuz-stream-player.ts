@@ -301,33 +301,43 @@ class VentuzStreamPlayer extends HTMLElement {
         this.ws?.close();
         delete this.ws;
 
-        this.ws = new WebSocket(this.url);
-        this.ws.binaryType = "arraybuffer";
+        let newWS = new WebSocket(this.url);
+        newWS.binaryType = "arraybuffer";
+        
+        newWS.onopen = () => {
+            if (this.ws != newWS)
+                return;
 
-        this.ws.onopen = () => {
             logger.log("WS open");
             this.setStatus("noStream");
         };
+        
+        newWS.onclose = () => {
+            if (this.ws != newWS)
+                return;
 
-        this.ws.onclose = () => {
             logger.log("WS close");
-            if (this.ws) {
-                this.setStatus("errClosed");
-                this.closeStream();
-                delete this.ws;
-                if (this.retryInterval) this.retryHandle = setTimeout(() => this.openWS(), this.retryInterval);
-            }
+            this.setStatus("errClosed");
+            this.closeStream();
+            delete this.ws;
+            if (this.retryInterval) this.retryHandle = setTimeout(() => this.openWS(), this.retryInterval);
         };
+        
+        newWS.onerror = (ev) => {
+            if (this.ws != newWS)
+                return;
 
-        this.ws.onerror = (ev) => {
             logger.log("WS error", ev);
             this.setStatus("errNoRuntime");
             this.closeStream();
             delete this.ws;
             if (this.retryInterval) this.retryHandle = setTimeout(() => this.openWS(), this.retryInterval);
         };
+        
+        newWS.onmessage = (ev) => {
+            if (this.ws != newWS)
+                return;
 
-        this.ws.onmessage = (ev) => {
             if (typeof ev.data === "string") {
                 this.handlePacket(JSON.parse(ev.data) as StreamOut.StreamPacket);
                 return;
@@ -336,6 +346,8 @@ class VentuzStreamPlayer extends HTMLElement {
                 delete this.parseBin;
             }
         };
+        
+        this.ws = newWS;
     }
 
     sendCommand(cmd: StreamOut.Command) {
