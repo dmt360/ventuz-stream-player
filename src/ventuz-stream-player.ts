@@ -14,7 +14,7 @@ import { keyEventToVKey } from "./key-mapper";
 
 import "./style.css";
 
-// localize me, or something
+// all user visible strings; override these in the "ventuz-stream-player:strings" event for i18n
 const defaultStatusMsgs = {
     connecting: "Connecting...",
     noStream: "Waiting for stream...",
@@ -24,6 +24,8 @@ const defaultStatusMsgs = {
     errClosed: "Connection lost",
     errGeneric: "Error",
     errBadFormat: "Can't play this video format",
+
+    fsButtonLabel: "Fullscreen",
 };
 
 type StatusType = keyof typeof defaultStatusMsgs;
@@ -53,7 +55,7 @@ class VentuzStreamPlayer extends HTMLElement {
     private streamHeader?: StreamOut.StreamHeader;
     private frameHeader?: StreamOut.FrameHeader;
     private mediaSource?: MediaSource;
-    private vidSrcBuffer?: SourceBuffer;
+    private srcBuffer?: SourceBuffer;
     private lastKeyFrameIndex = 0;
     private lastLatency = 0;
     private lastKfTs: number | undefined = undefined;
@@ -61,36 +63,42 @@ class VentuzStreamPlayer extends HTMLElement {
     private parseBin?: (arr: Uint8Array) => void;
     private retryHandle?: number;
     private maxKfInterval: number;
+    private firstJump = true;
 
     private video?: HTMLVideoElement;
     private statusLine?: HTMLDivElement;
 
-    private Demuxer?: H264Demuxer | HEVCDemuxer;
+    private demuxer?: H264Demuxer | HEVCDemuxer;
     private mp4Remuxer?: MP4Remuxer;
     private queue: QueueEntry[] = [];
 
+    private retry() {
+        if (this.retryInterval) this.retryHandle = setTimeout(() => this.openWS(), this.retryInterval);
+    }
+
+    // create Source buffer after init or format change
     private createSrcBuffer() {
         if (this.mediaSource) {
-            if (this.vidSrcBuffer) this.mediaSource.removeSourceBuffer(this.vidSrcBuffer);
+            if (this.srcBuffer) this.mediaSource.removeSourceBuffer(this.srcBuffer);
 
             try {
-                this.vidSrcBuffer = this.mediaSource.addSourceBuffer(`video/mp4; codecs="${this.codec}"`);
+                this.srcBuffer = this.mediaSource.addSourceBuffer(`video/mp4; codecs="${this.codec}"`);
             } catch {
                 logger.error("error creating source buffer", this.codec);
                 this.setStatus("errBadFormat");
                 return;
             }
-            this.vidSrcBuffer.mode = "sequence";
-            this.vidSrcBuffer.onerror = (e) => {
+            this.srcBuffer.mode = "sequence";
+            this.srcBuffer.onerror = (e) => {
                 logger.error("vid source error", e);
                 this.closeStream();
                 if (this.lastLatency) {
                     this.setStatus("errGeneric");
-                    if (this.retryInterval) this.retryHandle = setTimeout(() => this.openWS(), this.retryInterval);
+                    this.retry();
                 } else this.setStatus("errBadFormat");
             };
 
-            this.vidSrcBuffer.onupdateend = () => this.handleQueue();
+            this.srcBuffer.onupdateend = () => this.handleQueue();
             this.handleQueue();
         }
     }
@@ -102,16 +110,16 @@ class VentuzStreamPlayer extends HTMLElement {
         this.streamHeader = hdr;
         this.lastKeyFrameIndex = -1;
         this.lastLatency = 0;
+        this.firstJump = true;
         while (hdr.videoFrameRateDen < 1000) {
             hdr.videoFrameRateNum *= 10;
             hdr.videoFrameRateDen *= 10;
         }
 
-        if (this.streamHeader.videoCodecFourCC !== 0x68323634) {
-            // h264 only
-            //logger.error("Unsupported codec", this.streamHeader.videoCodecFourCC.toString(16));
-            //this.setStatus("errBadFormat");
-            //return false;
+        if (this.streamHeader.videoCodecFourCC !== 0x68323634 && this.streamHeader.videoCodecFourCC !== 0x68657663) {
+            logger.error("Unsupported codec", this.streamHeader.videoCodecFourCC.toString(16));
+            this.setStatus("errBadFormat");
+            return false;
         }
 
         if (this.video) {
@@ -126,7 +134,6 @@ class VentuzStreamPlayer extends HTMLElement {
                 logger.log("got is");
 
                 delete this.mediaSource;
-
                 const mediaSource = (this.mediaSource = new MediaSource());
 
                 mediaSource.onsourceopen = () => {
@@ -147,8 +154,7 @@ class VentuzStreamPlayer extends HTMLElement {
                         this.closeStream();
                         if (this.lastLatency) {
                             this.setStatus("errGeneric");
-                            if (this.retryInterval)
-                                this.retryHandle = setTimeout(() => this.openWS(), this.retryInterval);
+                            this.retry();
                         } else this.setStatus("errBadFormat");
                     };
                 }
@@ -179,8 +185,8 @@ class VentuzStreamPlayer extends HTMLElement {
             },
         };
 
-        if (this.streamHeader.videoCodecFourCC !== 0x68323634) this.Demuxer = new HEVCDemuxer(demuxerConfig);
-        else this.Demuxer = new H264Demuxer(demuxerConfig);
+        if (this.streamHeader.videoCodecFourCC !== 0x68323634) this.demuxer = new HEVCDemuxer(demuxerConfig);
+        else this.demuxer = new H264Demuxer(demuxerConfig);
 
         return true;
     }
@@ -194,27 +200,26 @@ class VentuzStreamPlayer extends HTMLElement {
             URL.revokeObjectURL(this.video.src);
         }
         delete this.mediaSource;
-        delete this.vidSrcBuffer;
+        delete this.srcBuffer;
 
         delete this.mp4Remuxer;
-        delete this.Demuxer;
+        delete this.demuxer;
 
         delete this.frameHeader;
         delete this.streamHeader;
     }
 
-    private firstJump = true;
 
     private handleQueue() {
-        if (this.queue.length > 0 && this.vidSrcBuffer && !this.vidSrcBuffer.updating) {
-            // Remove old frames from the buffer
-            if (this.vidSrcBuffer.buffered.length > 0) {
-                const start = this.vidSrcBuffer.buffered.start(0);
-                const end = this.vidSrcBuffer.buffered.end(0);
+        if (this.queue.length > 0 && this.srcBuffer && !this.srcBuffer.updating) {
+            if (this.srcBuffer.buffered.length > 0) {
+                const start = this.srcBuffer.buffered.start(0);
+                const end = this.srcBuffer.buffered.end(0);
                 const currentTime = this.video?.currentTime ?? 0;
                 const bufferThreshold = 5 + this.extraLatency;
                 const frametime = this.streamHeader!.videoFrameRateDen / this.streamHeader!.videoFrameRateNum;
 
+                // if we get a new keyframe and the actual latency exceeds the measured one, jump ahead
                 if (this.lastKfTs !== undefined) {
                     var jumpTo = this.lastKfTs + frametime;
                     if (end > jumpTo) {
@@ -231,25 +236,24 @@ class VentuzStreamPlayer extends HTMLElement {
 
                 // remove old frames from the buffer
                 if (currentTime - start >= 2 * bufferThreshold) {
-                    this.vidSrcBuffer.remove(start, currentTime - bufferThreshold);
+                    this.srcBuffer.remove(start, currentTime - bufferThreshold);
                     return;
                 }
             }
 
             const entry = this.queue.shift()!;
 
-            if (entry.keyTSOffset !== undefined && this.vidSrcBuffer.buffered.length) {
+            if (entry.keyTSOffset !== undefined && this.srcBuffer.buffered.length) {
                 this.lastKfTs =
-                    this.vidSrcBuffer.buffered.end(0) + entry.keyTSOffset / this.streamHeader!.videoFrameRateNum;
+                    this.srcBuffer.buffered.end(0) + entry.keyTSOffset / this.streamHeader!.videoFrameRateNum;
             }
-            this.vidSrcBuffer.appendBuffer(entry.data as BufferSource);
+            this.srcBuffer.appendBuffer(entry.data as BufferSource);
         }
     }
 
     private handlePacket(pkg: StreamOut.StreamPacket) {
         switch (pkg.type) {
             case "connected":
-                // create and connect muxer
                 if (this.openStream(pkg.data)) this.setStatus("playing");
                 break;
             case "disconnected":
@@ -272,10 +276,11 @@ class VentuzStreamPlayer extends HTMLElement {
     }
 
     private handleVideoFrame(data: Uint8Array) {
-        if (this.Demuxer && this.streamHeader && this.frameHeader) {
-            this.Demuxer.pushData(data);
+        if (this.demuxer && this.streamHeader && this.frameHeader) {
+            this.demuxer.pushData(data);
 
-            // make sure we get a keyframe at least every 4 seconds so we can throw away old frames
+            // make sure we get a keyframe at least every 4 to 6 seconds 
+            // so we can throw away old frames and recover from transmission errors
             if (this.frameHeader.flags === "keyFrame") {
                 this.lastKeyFrameIndex = this.frameHeader.frameIndex;
             } else if (
@@ -315,7 +320,7 @@ class VentuzStreamPlayer extends HTMLElement {
                 this.setStatus("errClosed");
                 this.closeStream();
                 delete this.ws;
-                if (this.retryInterval) this.retryHandle = setTimeout(() => this.openWS(), this.retryInterval);
+                this.retry();
             }
         };
 
@@ -324,7 +329,7 @@ class VentuzStreamPlayer extends HTMLElement {
             this.setStatus("errNoRuntime");
             this.closeStream();
             delete this.ws;
-            if (this.retryInterval) this.retryHandle = setTimeout(() => this.openWS(), this.retryInterval);
+            this.retry();
         };
 
         this.ws.onmessage = (ev) => {
@@ -424,9 +429,9 @@ class VentuzStreamPlayer extends HTMLElement {
         video.playsInline = true;
 
         video.oncanplay = (_) => {
-            if (this.vidSrcBuffer) {
+            if (this.srcBuffer) {
                 // measure latency (buffered end - current play time)
-                let end = this.vidSrcBuffer.buffered.end(0);
+                let end = this.srcBuffer.buffered.end(0);
                 const frametime = this.streamHeader!.videoFrameRateDen / this.streamHeader!.videoFrameRateNum;
 
                 const latency = Math.ceil((end - video.currentTime) / frametime) * frametime;
@@ -450,6 +455,7 @@ class VentuzStreamPlayer extends HTMLElement {
             overlay.appendChild(this.firstChild);
         }
 
+        // translate pointer event coordinates to output
         const getIntXY = (x: number, y: number) => {
             if (!this.streamHeader) return { x, y };
             let rect = overlay.getBoundingClientRect();
@@ -618,7 +624,7 @@ class VentuzStreamPlayer extends HTMLElement {
         };
 
         overlay.onkeypress = (e) => {
-            logger.log("press", e.key);
+            // deprecated but let's at least stop the event if it's there
             if (!this.useKeyboard) return;
             e.stopPropagation();
             e.preventDefault();
@@ -626,8 +632,8 @@ class VentuzStreamPlayer extends HTMLElement {
 
         overlay.onkeyup = (e) => {
             if (!this.useKeyboard) return;
-            var vkey = keyEventToVKey(e);
-            if (vkey != null) this.sendCommand({ type: "keyUp", data: vkey });
+            const vkey = keyEventToVKey(e);
+            if (vkey) this.sendCommand({ type: "keyUp", data: vkey });
             e.stopPropagation();
             e.preventDefault();
         };
@@ -635,12 +641,12 @@ class VentuzStreamPlayer extends HTMLElement {
         overlay.onkeydown = (e) => {
             if (!this.useKeyboard) return;
             var vkey = keyEventToVKey(e);
-            if (vkey != null) {
+            if (vkey) {
                 if (e.repeat) this.sendCommand({ type: "keyUp", data: vkey });
 
                 this.sendCommand({ type: "keyDown", data: vkey });
 
-                if (vkey < 32)
+                if (vkey < 32) // tab, enter, esc, etc
                     this.sendCommand({
                         type: "char",
                         data: vkey,
@@ -653,7 +659,6 @@ class VentuzStreamPlayer extends HTMLElement {
                     data: e.key.charCodeAt(0),
                 });
 
-            //;
             e.stopPropagation();
             e.preventDefault();
         };

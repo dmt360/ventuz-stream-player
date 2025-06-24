@@ -18,7 +18,7 @@ const codeToVKeyMap : { [code: string] : number }= {
   'ControlRight': 0xA3,   // VK_RCONTROL
   'AltLeft': 0xA4,        // VK_LMENU
   'AltRight': 0xA5,       // VK_RMENU
-  'Pause': 0x13,          // VK_PAUSE
+  'Pause': 0x13,          // VK_PAUSE  
   'CapsLock': 0x14,       // VK_CAPITAL
   'Escape': 0x1B,         // VK_ESCAPE
   'Space': 0x20,          // VK_SPACE
@@ -72,5 +72,5 @@ const codeToVKeyMap : { [code: string] : number }= {
 // Function to convert keydown/keyup event to VKEY code
 export function keyEventToVKey(event: KeyboardEvent) {
   // Return the VKEY code or null if not found
-  return codeToVKeyMap[event.code] || null;
+  return codeToVKeyMap[event.code] || 0;
 }
