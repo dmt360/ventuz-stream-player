@@ -29,12 +29,15 @@ jobs:
         env: 
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
 
-      - name: Create GitHub Release
+      - name: Create release archive
+        run: |
+          zip -r ventuz-stream-player-${{ github.ref_name }}.zip dist README.md LICENSE
+
+      - name: Create GitHub release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref }}
-          name: Release ${{ github.ref }}
           draft: false
           prerelease: false
+          files: ventuz-stream-player-${{ github.ref_name }}.zip     
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
