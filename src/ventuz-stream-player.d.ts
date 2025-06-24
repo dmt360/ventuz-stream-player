@@ -1,9 +1,10 @@
 export interface VentuzStreamPlayerAttributes {
-  url?: string;
-  extralatency?: number;
-  usekeyboard?: boolean;
-  usemouse?: boolean;
-  usetouch?: boolean;
+  url: string;
+  latency?: number;
+  noinput?: boolean;
+  nokeyboard: boolean;
+  nomouse: boolean;
+  notouch: boolean;
   fullscreenbutton?: boolean;
   retryinterval?: number;
 }
