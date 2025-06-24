@@ -1,7 +1,7 @@
 {
     "private": false,
     "name": "ventuz-stream-player",
-    "version": "0.8.0",
+    "version": "0.8.1",
     "author": "Tammo Hinrichs <tammo.hinrichs@ventuz.com> (https://ventuz.com/)",
     "description": "A web component for showing and interacting with Ventuz Stream Out outputs",
     "homepage": "https://github.com/VentuzTechnology/ventuz-stream-player",
@@ -22,6 +22,7 @@
     "license": "MIT",
     "type": "module",
     "main": "./dist/ventuz-stream-player-min.js",
+    "types": "./dist/ventuz-stream-player.d.ts",
     "files": [
         "dist"
     ],

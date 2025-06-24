@@ -39,7 +39,7 @@ declare global {
     var overrideVSPStrings: ((strings: typeof defaultStatusMsgs) => void) | undefined;
 }
 
-class VentuzStreamPlayer extends HTMLElement {
+export default class VentuzStreamPlayer extends HTMLElement {
     // parameters
     url = "";
     extraLatency = 0;

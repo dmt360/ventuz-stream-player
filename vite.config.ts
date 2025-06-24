@@ -1,5 +1,7 @@
 import type { UserConfig } from "vite";
 import cssInjectedByJsPlugin from "vite-plugin-css-injected-by-js";
+import { promises as fs } from "fs";
+import path from "path";
 
 export default {
     server: {
@@ -7,7 +9,15 @@ export default {
         host: true,
     },
 
-    plugins: [cssInjectedByJsPlugin()],
+    plugins: [cssInjectedByJsPlugin(),
+    {
+      name: "copy-dts",
+      closeBundle: async () => {
+        const src = path.resolve(__dirname, "src/ventuz-stream-player.d.ts");
+        const dest = path.resolve(__dirname, "dist/ventuz-stream-player.d.ts");
+        await fs.copyFile(src, dest);
+      }
+    }],
 
     build: {
         assetsDir: ".",
