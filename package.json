@@ -1,5 +1,5 @@
 {
-    "private": true,
+    "private": false,
     "name": "ventuz-stream-player",
     "version": "0.8.0",
     "author": "Tammo Hinrichs <tammo.hinrichs@ventuz.com> (https://ventuz.com/)",
