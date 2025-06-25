@@ -67,6 +67,7 @@ export default class VentuzStreamPlayer extends HTMLElement {
 
     private video?: HTMLVideoElement;
     private statusLine?: HTMLDivElement;
+    private fsbutton?: HTMLDivElement;
 
     private demuxer?: H264Demuxer | HEVCDemuxer;
     private mp4Remuxer?: MP4Remuxer;
@@ -209,7 +210,6 @@ export default class VentuzStreamPlayer extends HTMLElement {
         delete this.streamHeader;
     }
 
-
     private handleQueue() {
         if (this.queue.length > 0 && this.srcBuffer && !this.srcBuffer.updating) {
             if (this.srcBuffer.buffered.length > 0) {
@@ -279,7 +279,7 @@ export default class VentuzStreamPlayer extends HTMLElement {
         if (this.demuxer && this.streamHeader && this.frameHeader) {
             this.demuxer.pushData(data);
 
-            // make sure we get a keyframe at least every 4 to 6 seconds 
+            // make sure we get a keyframe at least every 4 to 6 seconds
             // so we can throw away old frames and recover from transmission errors
             if (this.frameHeader.flags === "keyFrame") {
                 this.lastKeyFrameIndex = this.frameHeader.frameIndex;
@@ -308,18 +308,16 @@ export default class VentuzStreamPlayer extends HTMLElement {
 
         let newWS = new WebSocket(this.url);
         newWS.binaryType = "arraybuffer";
-        
+
         newWS.onopen = () => {
-            if (this.ws != newWS)
-                return;
+            if (this.ws != newWS) return;
 
             logger.log("WS open");
             this.setStatus("noStream");
         };
-        
+
         newWS.onclose = () => {
-            if (this.ws != newWS)
-                return;
+            if (this.ws != newWS) return;
 
             logger.log("WS close");
             this.setStatus("errClosed");
@@ -327,10 +325,9 @@ export default class VentuzStreamPlayer extends HTMLElement {
             delete this.ws;
             this.retry();
         };
-        
+
         newWS.onerror = (ev) => {
-            if (this.ws != newWS)
-                return;
+            if (this.ws != newWS) return;
 
             logger.log("WS error", ev);
             this.setStatus("errNoRuntime");
@@ -338,10 +335,9 @@ export default class VentuzStreamPlayer extends HTMLElement {
             delete this.ws;
             this.retry();
         };
-        
+
         newWS.onmessage = (ev) => {
-            if (this.ws != newWS)
-                return;
+            if (this.ws != newWS) return;
 
             if (typeof ev.data === "string") {
                 this.handlePacket(JSON.parse(ev.data) as StreamOut.StreamPacket);
@@ -351,7 +347,7 @@ export default class VentuzStreamPlayer extends HTMLElement {
                 delete this.parseBin;
             }
         };
-        
+
         this.ws = newWS;
     }
 
@@ -367,6 +363,16 @@ export default class VentuzStreamPlayer extends HTMLElement {
             const text = this.statusMsgs[status];
             this.statusLine.textContent = text;
             this.statusLine.style.visibility = text ? "visible" : "hidden";
+        }
+    }
+
+    onFullscreenChange() {
+        if (this.fsbutton) {
+            if (document.fullscreenElement || (this.clientWidth === screen.availWidth && this.clientHeight === screen.availHeight) ) {
+                this.fsbutton.style.visibility = "hidden";
+            } else {
+                this.fsbutton.style.visibility = "visible";
+            }
         }
     }
 
@@ -658,7 +664,8 @@ export default class VentuzStreamPlayer extends HTMLElement {
 
                 this.sendCommand({ type: "keyDown", data: vkey });
 
-                if (vkey < 32) // tab, enter, esc, etc
+                if (vkey < 32)
+                    // tab, enter, esc, etc
                     this.sendCommand({
                         type: "char",
                         data: vkey,
@@ -679,23 +686,20 @@ export default class VentuzStreamPlayer extends HTMLElement {
         this.appendChild(overlay);
 
         if (this.fullscreenButton && document.fullscreenEnabled) {
-            const fsbutton = document.createElement("div");
-            fsbutton.className = "vsp-fsbutton";
-            fsbutton.innerText = "Fullscreen";
-            if (document.fullscreenElement) fsbutton.style.visibility = "hidden";
+            this.fsbutton = document.createElement("div");
+            this.fsbutton.className = "vsp-fsbutton";
+            this.fsbutton.innerText = "Fullscreen";
+            if (document.fullscreenElement) this.fsbutton.style.visibility = "hidden";
 
-            fsbutton.onclick = () => {
+            this.fsbutton.onclick = () => {
                 this.requestFullscreen();
             };
 
-            this.onfullscreenchange = () => {
-                if (document.fullscreenElement) {
-                    fsbutton.style.visibility = "hidden";
-                } else {
-                    fsbutton.style.visibility = "visible";
-                }
-            };
-            this.appendChild(fsbutton);
+            this.appendChild(this.fsbutton);
+            
+            this.onFullscreenChange = this.onFullscreenChange.bind(this);
+            window.addEventListener("resize", this.onFullscreenChange);
+            document.addEventListener("fullscreenchange", this.onFullscreenChange);
         }
 
         this.openWS();
@@ -711,6 +715,10 @@ export default class VentuzStreamPlayer extends HTMLElement {
         this.ws?.close();
         delete this.ws;
         this.innerHTML = "";
+        if (this.fsbutton) {
+            document.removeEventListener("fullscreenchange", this.onFullscreenChange);
+            window.removeEventListener("resize", this.onFullscreenChange);
+        }
     }
 }
 
