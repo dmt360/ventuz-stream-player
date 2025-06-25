@@ -2,9 +2,9 @@ export interface VentuzStreamPlayerAttributes {
   url: string;
   latency?: number;
   noinput?: boolean;
-  nokeyboard: boolean;
-  nomouse: boolean;
-  notouch: boolean;
+  nokeyboard?: boolean;
+  nomouse?: boolean;
+  notouch?: boolean;
   fullscreenbutton?: boolean;
   retryinterval?: number;
 }
