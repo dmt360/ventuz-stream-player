@@ -2,9 +2,9 @@
     "private": false,
     "name": "ventuz-stream-player",
     "version": "0.8.3",
-    "author": "Tammo Hinrichs <tammo.hinrichs@ventuz.com> (https://ventuz.com/)",
+    "author": "Tammo Hinrichs <tammo.hinrichs@ventuz.com>",
     "description": "A web component for showing and interacting with Ventuz Stream Out outputs",
-    "homepage": "https://github.com/VentuzTechnology/ventuz-stream-player",
+    "homepage": "https://ventuz.com/",
     "bugs": {
         "url": "https://github.com/VentuzTechnology/ventuz-stream-player/issues"
     },
