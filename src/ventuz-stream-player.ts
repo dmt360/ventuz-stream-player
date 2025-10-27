@@ -73,8 +73,120 @@ export default class VentuzStreamPlayer extends HTMLElement {
     private mp4Remuxer?: MP4Remuxer;
     private queue: QueueEntry[] = [];
 
+    // Recovery and watchdog state
+    private lastPacketTs?: number;
+    private watchdogHandle?: number;
+    private readonly WATCHDOG_TIMEOUT = 8000; // ms - no packets received
+    private readonly SRCBUFFER_UPDATE_TIMEOUT = 5000; // ms - append stuck
+    private readonly PLAYBACK_STALL_TIMEOUT = 3000; // ms - video not progressing
+    private readonly MAX_QUEUE_SIZE = 200; // prevent memory issues
+    private srcBufferUpdateStart?: number;
+    private lastVideoTime?: number;
+    private lastVideoTimeCheck?: number;
+    private stallCheckHandle?: number;
+    private idrRequestCount = 0;
+    private readonly MAX_IDR_REQUESTS = 3;
+
     private retry() {
         if (this.retryInterval) this.retryHandle = setTimeout(() => this.openWS(), this.retryInterval);
+    }
+
+    private startWatchdogs() {
+        // Packet reception watchdog - detects silent connection stalls
+        this.lastPacketTs = Date.now();
+        if (this.watchdogHandle) clearInterval(this.watchdogHandle);
+        this.watchdogHandle = setInterval(() => {
+            if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+            
+            const now = Date.now();
+            const timeSinceLastPacket = now - (this.lastPacketTs ?? 0);
+            
+            if (timeSinceLastPacket > this.WATCHDOG_TIMEOUT) {
+                logger.warn(`watchdog: no packets for ${timeSinceLastPacket}ms — forcing reconnection`);
+                this.forceReconnect("packet timeout");
+            }
+        }, 1000) as unknown as number;
+
+        // Playback stall detection - detects frozen video
+        if (this.stallCheckHandle) clearInterval(this.stallCheckHandle);
+        this.stallCheckHandle = setInterval(() => {
+            if (!this.video || !this.streamHeader) return;
+            
+            const now = Date.now();
+            const currentTime = this.video.currentTime;
+            
+            // Only check if we should be playing
+            if (this.srcBuffer && this.srcBuffer.buffered.length > 0 && !this.video.paused) {
+                const bufferedEnd = this.srcBuffer.buffered.end(0);
+                
+                // If we have buffer ahead but video hasn't progressed
+                if (bufferedEnd > currentTime + 0.5) {
+                    if (this.lastVideoTime === currentTime) {
+                        const stallDuration = now - (this.lastVideoTimeCheck ?? now);
+                        if (stallDuration > this.PLAYBACK_STALL_TIMEOUT) {
+                            logger.warn(`playback stalled for ${stallDuration}ms — forcing recovery`);
+                            this.forceReconnect("playback stall");
+                            return;
+                        }
+                    } else {
+                        this.lastVideoTime = currentTime;
+                        this.lastVideoTimeCheck = now;
+                    }
+                }
+            }
+        }, 1000) as unknown as number;
+    }
+
+    private stopWatchdogs() {
+        if (this.watchdogHandle) {
+            clearInterval(this.watchdogHandle);
+            delete this.watchdogHandle;
+        }
+        if (this.stallCheckHandle) {
+            clearInterval(this.stallCheckHandle);
+            delete this.stallCheckHandle;
+        }
+    }
+
+    private forceReconnect(reason: string) {
+        logger.log(`forceReconnect: ${reason}`);
+        this.idrRequestCount = 0;
+        
+        // Close everything cleanly
+        this.closeStream();
+        
+        if (this.ws) {
+            try {
+                this.ws.close();
+            } catch (e) {
+                logger.error("Error closing WebSocket", e);
+            }
+            delete this.ws;
+        }
+        
+        // Retry immediately
+        this.retry();
+    }
+
+    private checkQueueSize() {
+        if (this.queue.length > this.MAX_QUEUE_SIZE) {
+            logger.warn(`queue overflow (${this.queue.length} entries), clearing and requesting keyframe`);
+            this.queue.length = 0;
+            this.requestIDRFrame("queue overflow");
+        }
+    }
+
+    private requestIDRFrame(reason: string) {
+        this.idrRequestCount++;
+        
+        if (this.idrRequestCount > this.MAX_IDR_REQUESTS) {
+            logger.warn(`too many IDR requests (${this.idrRequestCount}), forcing reconnection`);
+            this.forceReconnect("IDR request limit");
+            return;
+        }
+        
+        logger.log(`requesting IDR frame: ${reason}`);
+        this.sendCommand({ type: "requestIDRFrame" });
     }
 
     // create Source buffer after init or format change
@@ -99,7 +211,11 @@ export default class VentuzStreamPlayer extends HTMLElement {
                 } else this.setStatus("errBadFormat");
             };
 
-            this.srcBuffer.onupdateend = () => this.handleQueue();
+            this.srcBuffer.onupdateend = () => {
+                delete this.srcBufferUpdateStart;
+                this.handleQueue();
+            };
+            
             this.handleQueue();
         }
     }
@@ -147,17 +263,10 @@ export default class VentuzStreamPlayer extends HTMLElement {
                     try {
                         this.video.src = URL.createObjectURL(mediaSource);
                     } catch (error: any) {
-                        logger.log(error);
+                        logger.error("failed to create object URL", error);
+                        this.forceReconnect("MediaSource creation failed");
+                        return;
                     }
-
-                    this.video.onerror = (e) => {
-                        logger.error("video error", e);
-                        this.closeStream();
-                        if (this.lastLatency) {
-                            this.setStatus("errGeneric");
-                            this.retry();
-                        } else this.setStatus("errBadFormat");
-                    };
                 }
 
                 this.queue.push({ data: is, keyTSOffset: undefined });
@@ -211,6 +320,19 @@ export default class VentuzStreamPlayer extends HTMLElement {
     }
 
     private handleQueue() {
+        // Check for stuck SourceBuffer update
+        if (this.srcBuffer && this.srcBuffer.updating && this.srcBufferUpdateStart) {
+            const updateDuration = Date.now() - this.srcBufferUpdateStart;
+            if (updateDuration > this.SRCBUFFER_UPDATE_TIMEOUT) {
+                logger.error(`SourceBuffer update stuck for ${updateDuration}ms — forcing recovery`);
+                this.forceReconnect("srcbuffer timeout");
+                return;
+            }
+        }
+
+        // Check queue size
+        this.checkQueueSize();
+
         if (this.queue.length > 0 && this.srcBuffer && !this.srcBuffer.updating) {
             if (this.srcBuffer.buffered.length > 0) {
                 const start = this.srcBuffer.buffered.start(0);
@@ -247,6 +369,9 @@ export default class VentuzStreamPlayer extends HTMLElement {
                 this.lastKfTs =
                     this.srcBuffer.buffered.end(0) + entry.keyTSOffset / this.streamHeader!.videoFrameRateNum;
             }
+            
+            // Track when append starts for timeout detection
+            this.srcBufferUpdateStart = Date.now();
             this.srcBuffer.appendBuffer(entry.data as BufferSource);
         }
     }
@@ -283,13 +408,13 @@ export default class VentuzStreamPlayer extends HTMLElement {
             // so we can throw away old frames and recover from transmission errors
             if (this.frameHeader.flags === "keyFrame") {
                 this.lastKeyFrameIndex = this.frameHeader.frameIndex;
+                this.idrRequestCount = 0; // Reset on successful keyframe
             } else if (
                 this.frameHeader.frameIndex - this.lastKeyFrameIndex >
                 (this.maxKfInterval * this.streamHeader.videoFrameRateNum) / this.streamHeader.videoFrameRateDen
             ) {
-                logger.log("requesting IDR frame");
                 this.lastKeyFrameIndex = this.frameHeader.frameIndex;
-                this.sendCommand({ type: "requestIDRFrame" });
+                this.requestIDRFrame("keyframe interval exceeded");
             }
 
             delete this.frameHeader;
@@ -314,6 +439,7 @@ export default class VentuzStreamPlayer extends HTMLElement {
 
             logger.log("WS open");
             this.setStatus("noStream");
+            this.startWatchdogs();
         };
 
         newWS.onclose = () => {
@@ -322,6 +448,7 @@ export default class VentuzStreamPlayer extends HTMLElement {
             logger.log("WS close");
             this.setStatus("errClosed");
             this.closeStream();
+            this.stopWatchdogs();
             delete this.ws;
             this.retry();
         };
@@ -332,6 +459,7 @@ export default class VentuzStreamPlayer extends HTMLElement {
             logger.log("WS error", ev);
             this.setStatus("errNoRuntime");
             this.closeStream();
+            this.stopWatchdogs();
             delete this.ws;
             this.retry();
         };
@@ -339,12 +467,19 @@ export default class VentuzStreamPlayer extends HTMLElement {
         newWS.onmessage = (ev) => {
             if (this.ws != newWS) return;
 
+            // Update packet timestamp for watchdog
+            this.lastPacketTs = Date.now();
+
             if (typeof ev.data === "string") {
                 this.handlePacket(JSON.parse(ev.data) as StreamOut.StreamPacket);
                 return;
             } else if (this.parseBin) {
                 this.parseBin(new Uint8Array(ev.data as ArrayBuffer));
                 delete this.parseBin;
+            } else {
+                // Unexpected binary message - log warning and request recovery
+                logger.warn("received unexpected binary message without parseBin handler, requesting keyframe");
+                this.requestIDRFrame("unexpected binary");
             }
         };
 
@@ -459,6 +594,45 @@ export default class VentuzStreamPlayer extends HTMLElement {
                 }
             }
             video.play();
+        };
+
+        // Add comprehensive error handling for video element
+        video.onerror = () => {
+            const error = video.error;
+            if (error) {
+                logger.error("video element error", {
+                    code: error.code,
+                    message: error.message,
+                    MEDIA_ERR_ABORTED: error.code === error.MEDIA_ERR_ABORTED,
+                    MEDIA_ERR_NETWORK: error.code === error.MEDIA_ERR_NETWORK,
+                    MEDIA_ERR_DECODE: error.code === error.MEDIA_ERR_DECODE,
+                    MEDIA_ERR_SRC_NOT_SUPPORTED: error.code === error.MEDIA_ERR_SRC_NOT_SUPPORTED,
+                });
+                
+                // For decode errors, force recovery
+                if (error.code === error.MEDIA_ERR_DECODE) {
+                    this.forceReconnect("video decode error");
+                } else if (error.code === error.MEDIA_ERR_NETWORK) {
+                    this.forceReconnect("video network error");
+                } else {
+                    // For other errors, try to recover through stream close
+                    this.closeStream();
+                    this.retry();
+                }
+            }
+        };
+
+        video.onstalled = () => {
+            logger.warn("video stalled event");
+            // Don't immediately reconnect on stalled, playback watchdog will handle persistent stalls
+        };
+
+        video.onsuspend = () => {
+            logger.log("video suspend event");
+        };
+
+        video.onwaiting = () => {
+            logger.log("video waiting for data");
         };
 
         const status = (this.statusLine = document.createElement("div"));
@@ -707,14 +881,22 @@ export default class VentuzStreamPlayer extends HTMLElement {
 
     disconnectedCallback() {
         logger.log("disconnected");
+        
+        // Stop all timers
         if (this.retryHandle) {
             clearTimeout(this.retryHandle);
             delete this.retryHandle;
         }
+        this.stopWatchdogs();
+        
+        // Clean up connections
         this.closeStream();
         this.ws?.close();
         delete this.ws;
+        
+        // Clean up DOM
         this.innerHTML = "";
+        
         if (this.fsbutton) {
             document.removeEventListener("fullscreenchange", this.onFullscreenChange);
             window.removeEventListener("resize", this.onFullscreenChange);
