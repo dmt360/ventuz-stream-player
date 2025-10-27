@@ -22,6 +22,7 @@
     "license": "MIT",
     "type": "module",
     "main": "./dist/ventuz-stream-player-min.js",
+    "module": "./dist/ventuz-stream-player-min.js",
     "types": "./dist/ventuz-stream-player.d.ts",
     "files": [
         "dist"
@@ -34,6 +35,7 @@
     "scripts": {
         "dev": "vite",
         "build": "tsc && vite build",
+        "prepare": "npm run build",
         "preview": "vite preview"
     },
     "prettier": {
